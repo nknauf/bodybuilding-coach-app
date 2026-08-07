@@ -46,4 +46,38 @@ describe.skipIf(!runDatabaseTests)("Neon tenant constraints", () => {
       }),
     ).rejects.toThrow();
   });
+
+  it("reassignment changes scoped access and cascades event ownership atomically", async () => {
+    const coachB = "10000000-0000-4000-8000-000000000002";
+    const rollback = new Error("ROLLBACK_TEST");
+    await expect(
+      prisma?.$transaction(async (tx) => {
+        expect(
+          await tx.clientProfile.findFirst({
+            where: { id: clientB, coachId: coachB },
+          }),
+        ).not.toBeNull();
+        await tx.clientProfile.update({
+          where: { id: clientB },
+          data: { coachId: coachA },
+        });
+        expect(
+          await tx.clientProfile.findFirst({
+            where: { id: clientB, coachId: coachB },
+          }),
+        ).toBeNull();
+        expect(
+          await tx.clientProfile.findFirst({
+            where: { id: clientB, coachId: coachA },
+          }),
+        ).not.toBeNull();
+        expect(
+          await tx.workout.count({
+            where: { clientId: clientB, coachId: coachA },
+          }),
+        ).toBeGreaterThan(0);
+        throw rollback;
+      }),
+    ).rejects.toThrow("ROLLBACK_TEST");
+  });
 });
