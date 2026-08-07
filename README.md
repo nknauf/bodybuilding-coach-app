@@ -14,17 +14,19 @@ Vitest, npm, and Vercel.
 
 - Clerk sign-in/sign-up, Next 16 `proxy.ts`, and verified Clerk webhook sync.
 - Database-backed `ADMIN`, `COACH`, and `CLIENT` roles and account states.
-- Admin coach provisioning, enable/disable operations, client reassignment
-  service, platform counts, and an audit viewer.
-- Coach client provisioning with a development-safe sign-up-by-email workflow,
-  archive/deactivate service, a global/private exercise catalog, and an actual
-  invitation throttle (20 per coach/hour).
-- Dated workouts with ordered exercises, assigned sets/reps, exercise-name
+- Admin coach provisioning, confirmed enable/disable controls, client
+  reassignment management, platform counts, and an audit viewer.
+- Coach client provisioning with Clerk email invitations and a secure manual
+  link fallback, invitation status/retry controls, archive/deactivate/reactivate
+  controls, a global/private exercise catalog, and an invitation throttle (20
+  per coach/hour).
+- A multi-exercise workout builder with ordering, multiple assigned sets, and
+  dated workouts with assigned reps and exercise-name
   snapshots, set logging, skipped sets, visibly extra sets, partial saves,
   notes, and immutable finalized workouts.
-- Dated meals with optional expected/actual calories and macros; blank actuals
-  mean the expected values are assumed. Completion is one-way.
-- Dated supplements with dosage text and one-way completion.
+- Dated meals with editable ingredient rows and optional expected/actual
+  calories and macros; blank actuals mean expected values are assumed.
+- Dated supplements with dosage, coach notes, and one-way completion.
 - Client Monday-Sunday calendar with blue workout, green meal, and red
   supplement events; a client can securely move an unfinished event once.
 - Pure effective-state derivation (`SCHEDULED`, `COMPLETED`, `OVERDUE`,
@@ -33,8 +35,8 @@ Vitest, npm, and Vercel.
   completed assigned sets / expected assigned sets; extra sets never increase
   it. Overall compliance uses 50/35/15 weights normalized across only assigned
   categories.
-- Daily, weekly, workout, meal, and overall streak domain functions. The UI
-  currently displays the daily no-miss streak.
+- Daily, weekly, workout, meal, and overall streak calculations surfaced in
+  client and coach progress views.
 - Multiple bodyweight entries per day, client-local daily selection (marked
   morning entry, otherwise earliest), 7/30/90/365-day charts, latest value, and
   rate-of-change domain calculation.
@@ -222,25 +224,19 @@ production. Back up the database and review generated SQL before deploy.
 
 ## Known limitations and deferred boundaries
 
-- Local client invitations provision an account and audit record but do not send
-  email. A production mail provider/Clerk invitation flow should call the same
-  provisioning service.
-- The coach scheduling form assigns one exercise at a time; the domain service
-  and schema support multiple ordered exercises and sets in a single workout.
-- Meal ingredients are modeled but the focused UI currently captures meal name
-  and nutrition, not ingredient editing.
-- The daily streak is surfaced; the other tested streak functions are not yet
-  displayed.
-- Client reassignment and client archive/deactivation are transactional services
-  but do not yet have dedicated admin/coach controls in the focused UI.
+- Clerk invitation email requires a configured Clerk secret key and enabled
+  delivery. When unavailable, the coach must copy the one-time manual link shown
+  after creation or regeneration. The client must still sign up with the exact
+  pre-provisioned email.
+- Scheduling creates dated assignments rather than reusable templates or a full
+  recurrence editor.
+- Compliance range selection uses the implemented day/week/30/90-day options;
+  it is not an arbitrary date-picker report.
 - No PostgreSQL RLS is configured. Isolation is application-scoped as described
   above.
 - R2 photos, Stream Chat, PostHog, Upstash Redis, production email delivery,
   admin impersonation, exports, advanced analytics, recurrence editing,
   background-job infrastructure, drag-and-drop, and advanced exercise analytics
   are deferred. Their environment variables are inert.
-- The npm production audit currently reports three high advisories through
-  Next’s bundled PostCSS/sharp dependency ranges. npm proposes an unsafe
-  downgrade to Next 9 rather than a compatible fix. Track the upstream stable
-  Next release and upgrade when a compatible patched build is published; image
-  uploads/processing are not implemented in this MVP.
+- The application is pinned to patched stable Next.js 16.3.0. The production
+  dependency audit is expected to remain clear; rerun it during deployment.
