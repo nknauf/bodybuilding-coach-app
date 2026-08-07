@@ -1,0 +1,11 @@
+.next
+node_modules
+src/generated/prisma
+coverage
+package-lock.json
+.agents
+.claude
+.windsurf
+AGENTS.md
+CLAUDE.md
+skills-lock.json

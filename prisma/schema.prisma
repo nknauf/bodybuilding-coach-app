@@ -1,0 +1,395 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  COACH
+  CLIENT
+}
+
+enum UserStatus {
+  INVITED
+  ACTIVE
+  DISABLED
+  ARCHIVED
+}
+
+enum ClientStatus {
+  INVITED
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
+enum ExerciseScope {
+  GLOBAL
+  COACH
+}
+
+enum MuscleGroup {
+  CHEST
+  BACK
+  SHOULDERS
+  LEGS
+  ARMS
+  CORE
+}
+
+enum Equipment {
+  BARBELL
+  DUMBBELL
+  CABLE
+  BODYWEIGHT
+  PIN_LOADED_MACHINE
+  PLATE_LOADED_MACHINE
+}
+
+enum ExerciseCategory {
+  COMPOUND
+  ISOLATION
+  CARDIO
+  MOBILITY
+}
+
+enum EventStatus {
+  SCHEDULED
+  COMPLETED
+  OVERDUE
+  MISSED
+}
+
+enum SetLogStatus {
+  COMPLETED
+  SKIPPED
+}
+
+enum ScheduledEventKind {
+  WORKOUT
+  MEAL
+  SUPPLEMENT
+}
+
+enum WeightUnit {
+  LB
+  KG
+}
+
+model User {
+  id              String            @id @default(uuid()) @db.Uuid
+  clerkUserId     String?           @unique
+  email           String            @unique
+  firstName       String
+  lastName        String
+  role            Role
+  status          UserStatus        @default(INVITED)
+  timezone        String            @default("UTC")
+  lastSignedInAt  DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  deletedAt       DateTime?
+  coachProfile    CoachProfile?
+  clientProfile   ClientProfile?
+  auditLogs       AuditLog[]        @relation("AuditActor")
+  reschedules     EventReschedule[]
+  bodyMetricsMade BodyMetric[]      @relation("BodyMetricCreator")
+
+  @@index([role, status])
+  @@index([deletedAt])
+}
+
+model CoachProfile {
+  id               String               @id @default(uuid()) @db.Uuid
+  userId           String               @unique @db.Uuid
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  user             User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
+  clients          ClientProfile[]
+  exercises        Exercise[]
+  workouts         Workout[]
+  meals            MealEvent[]
+  supplements      SupplementEvent[]
+  invites          ClientInvite[]
+  ownershipHistory ClientCoachHistory[] @relation("HistoryCoach")
+
+  @@index([userId])
+}
+
+model ClientProfile {
+  id               String               @id @default(uuid()) @db.Uuid
+  userId           String               @unique @db.Uuid
+  coachId          String?              @db.Uuid
+  status           ClientStatus         @default(INVITED)
+  joinedAt         DateTime?
+  archivedAt       DateTime?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  user             User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
+  coach            CoachProfile?        @relation(fields: [coachId], references: [id], onDelete: Restrict)
+  workouts         Workout[]
+  meals            MealEvent[]
+  supplements      SupplementEvent[]
+  bodyMetrics      BodyMetric[]
+  ownershipHistory ClientCoachHistory[] @relation("HistoryClient")
+
+  @@unique([id, coachId])
+  @@index([coachId, status])
+  @@index([userId, status])
+}
+
+model ClientCoachHistory {
+  id         String        @id @default(uuid()) @db.Uuid
+  clientId   String        @db.Uuid
+  coachId    String        @db.Uuid
+  assignedAt DateTime      @default(now())
+  endedAt    DateTime?
+  client     ClientProfile @relation("HistoryClient", fields: [clientId], references: [id], onDelete: Restrict)
+  coach      CoachProfile  @relation("HistoryCoach", fields: [coachId], references: [id], onDelete: Restrict)
+
+  @@index([clientId, assignedAt])
+  @@index([coachId, endedAt])
+}
+
+model ClientInvite {
+  id         String       @id @default(uuid()) @db.Uuid
+  coachId    String       @db.Uuid
+  email      String
+  firstName  String
+  lastName   String
+  timezone   String
+  tokenHash  String       @unique
+  status     InviteStatus @default(PENDING)
+  expiresAt  DateTime
+  acceptedAt DateTime?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  coach      CoachProfile @relation(fields: [coachId], references: [id], onDelete: Restrict)
+
+  @@index([coachId, status])
+  @@index([email, status])
+}
+
+model Exercise {
+  id             String            @id @default(uuid()) @db.Uuid
+  scope          ExerciseScope
+  ownerCoachId   String?           @db.Uuid
+  name           String
+  normalizedName String
+  muscleGroup    MuscleGroup
+  equipment      Equipment
+  category       ExerciseCategory
+  isActive       Boolean           @default(true)
+  archivedAt     DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  ownerCoach     CoachProfile?     @relation(fields: [ownerCoachId], references: [id], onDelete: Restrict)
+  workoutItems   WorkoutExercise[]
+
+  @@unique([ownerCoachId, normalizedName])
+  @@index([scope, isActive])
+  @@index([ownerCoachId, isActive])
+}
+
+model Workout {
+  id                  String            @id @default(uuid()) @db.Uuid
+  coachId             String            @db.Uuid
+  clientId            String            @db.Uuid
+  name                String
+  notes               String?
+  durationMinutes     Int?
+  coachComment        String?
+  clientNotes         String?
+  originalScheduledAt DateTime
+  scheduledAt         DateTime
+  scheduleTimezone    String
+  storedStatus        EventStatus       @default(SCHEDULED)
+  movedByClient       Boolean           @default(false)
+  finalizedAt         DateTime?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+  coach               CoachProfile      @relation(fields: [coachId], references: [id], onDelete: Restrict)
+  client              ClientProfile     @relation(fields: [clientId, coachId], references: [id, coachId], onDelete: Restrict)
+  exercises           WorkoutExercise[]
+  setLogs             WorkoutSetLog[]
+
+  @@index([coachId, clientId, scheduledAt])
+  @@index([clientId, scheduledAt])
+  @@index([storedStatus, scheduledAt])
+}
+
+model WorkoutExercise {
+  id                   String          @id @default(uuid()) @db.Uuid
+  workoutId            String          @db.Uuid
+  exerciseId           String          @db.Uuid
+  exerciseNameSnapshot String
+  orderIndex           Int
+  coachNotes           String?
+  clientNotes          String?
+  workout              Workout         @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+  exercise             Exercise        @relation(fields: [exerciseId], references: [id], onDelete: Restrict)
+  assignedSets         AssignedSet[]
+  setLogs              WorkoutSetLog[]
+
+  @@unique([workoutId, orderIndex])
+  @@index([exerciseId])
+}
+
+model AssignedSet {
+  id                String          @id @default(uuid()) @db.Uuid
+  workoutExerciseId String          @db.Uuid
+  orderIndex        Int
+  expectedReps      Int
+  workoutExercise   WorkoutExercise @relation(fields: [workoutExerciseId], references: [id], onDelete: Cascade)
+  log               WorkoutSetLog?
+
+  @@unique([workoutExerciseId, orderIndex])
+}
+
+model WorkoutSetLog {
+  id                String          @id @default(uuid()) @db.Uuid
+  workoutId         String          @db.Uuid
+  workoutExerciseId String          @db.Uuid
+  assignedSetId     String?         @unique @db.Uuid
+  clientId          String          @db.Uuid
+  status            SetLogStatus
+  actualReps        Int?
+  actualWeight      Decimal?        @db.Decimal(8, 2)
+  weightUnit        WeightUnit?
+  isExtra           Boolean         @default(false)
+  loggedAt          DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  workout           Workout         @relation(fields: [workoutId], references: [id], onDelete: Restrict)
+  workoutExercise   WorkoutExercise @relation(fields: [workoutExerciseId], references: [id], onDelete: Restrict)
+  assignedSet       AssignedSet?    @relation(fields: [assignedSetId], references: [id], onDelete: Restrict)
+
+  @@index([workoutId, clientId])
+  @@index([workoutExerciseId, isExtra])
+}
+
+model MealEvent {
+  id                   String           @id @default(uuid()) @db.Uuid
+  coachId              String           @db.Uuid
+  clientId             String           @db.Uuid
+  name                 String
+  description          String?
+  expectedCalories     Int?
+  expectedProteinGrams Int?
+  expectedCarbGrams    Int?
+  expectedFatGrams     Int?
+  actualCalories       Int?
+  actualProteinGrams   Int?
+  actualCarbGrams      Int?
+  actualFatGrams       Int?
+  originalScheduledAt  DateTime
+  scheduledAt          DateTime
+  scheduleTimezone     String
+  storedStatus         EventStatus      @default(SCHEDULED)
+  movedByClient        Boolean          @default(false)
+  completedAt          DateTime?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  coach                CoachProfile     @relation(fields: [coachId], references: [id], onDelete: Restrict)
+  client               ClientProfile    @relation(fields: [clientId, coachId], references: [id, coachId], onDelete: Restrict)
+  ingredients          MealIngredient[]
+
+  @@index([coachId, clientId, scheduledAt])
+  @@index([clientId, scheduledAt])
+  @@index([storedStatus, scheduledAt])
+}
+
+model MealIngredient {
+  id         String    @id @default(uuid()) @db.Uuid
+  mealId     String    @db.Uuid
+  name       String
+  amount     String
+  orderIndex Int
+  meal       MealEvent @relation(fields: [mealId], references: [id], onDelete: Cascade)
+
+  @@unique([mealId, orderIndex])
+}
+
+model SupplementEvent {
+  id                  String        @id @default(uuid()) @db.Uuid
+  coachId             String        @db.Uuid
+  clientId            String        @db.Uuid
+  name                String
+  dosageText          String
+  clientNote          String?
+  originalScheduledAt DateTime
+  scheduledAt         DateTime
+  scheduleTimezone    String
+  storedStatus        EventStatus   @default(SCHEDULED)
+  movedByClient       Boolean       @default(false)
+  completedAt         DateTime?
+  recurrenceSeriesId  String?       @db.Uuid
+  recurrenceRule      Json?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  coach               CoachProfile  @relation(fields: [coachId], references: [id], onDelete: Restrict)
+  client              ClientProfile @relation(fields: [clientId, coachId], references: [id, coachId], onDelete: Restrict)
+
+  @@index([coachId, clientId, scheduledAt])
+  @@index([clientId, scheduledAt])
+  @@index([storedStatus, scheduledAt])
+  @@index([recurrenceSeriesId])
+}
+
+model EventReschedule {
+  id          String             @id @default(uuid()) @db.Uuid
+  kind        ScheduledEventKind
+  eventId     String             @db.Uuid
+  actorUserId String             @db.Uuid
+  fromTime    DateTime
+  toTime      DateTime
+  createdAt   DateTime           @default(now())
+  actor       User               @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@unique([kind, eventId])
+  @@index([actorUserId, createdAt])
+}
+
+model BodyMetric {
+  id         String        @id @default(uuid()) @db.Uuid
+  clientId   String        @db.Uuid
+  value      Decimal       @db.Decimal(8, 2)
+  unit       WeightUnit
+  measuredAt DateTime
+  isMorning  Boolean       @default(false)
+  creatorId  String        @db.Uuid
+  createdAt  DateTime      @default(now())
+  client     ClientProfile @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  creator    User          @relation("BodyMetricCreator", fields: [creatorId], references: [id], onDelete: Restrict)
+
+  @@index([clientId, measuredAt])
+}
+
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  actorUserId String?  @db.Uuid
+  actorRole   Role?
+  action      String
+  entityType  String
+  entityId    String
+  oldValue    Json?
+  newValue    Json?
+  ipAddress   String?
+  requestId   String?
+  createdAt   DateTime @default(now())
+  actor       User?    @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([entityType, entityId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([createdAt])
+}
