@@ -2,7 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { requireActor } from "@/server/auth/current-user";
-import { createCoach, setCoachEnabled } from "@/server/services/admin";
+import {
+  createCoach,
+  reassignClient,
+  setCoachEnabled,
+} from "@/server/services/admin";
 import type { ActionState } from "./state";
 import { actionError } from "./state";
 
@@ -18,6 +22,26 @@ export async function createCoachAction(
       ok: true,
       message: "Coach provisioned. They can now sign up with this email.",
     };
+  } catch (error) {
+    return actionError(error);
+  }
+}
+
+export async function reassignClientAction(
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  try {
+    const actor = await requireActor(["ADMIN"]);
+    await reassignClient(
+      actor,
+      formData.get("clientId"),
+      formData.get("coachId"),
+    );
+    revalidatePath("/admin");
+    revalidatePath("/admin/clients");
+    revalidatePath("/coach");
+    return { ok: true, message: "Client reassigned." };
   } catch (error) {
     return actionError(error);
   }

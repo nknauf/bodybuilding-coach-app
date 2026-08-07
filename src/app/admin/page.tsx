@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/status-badge";
+import { ConfirmForm } from "@/components/confirm-form";
 
 export default async function AdminPage() {
   await requireActor(["ADMIN"]);
@@ -45,7 +46,7 @@ export default async function AdminPage() {
         ))}
       </div>
       <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
-        <Card>
+        <Card id="coaches">
           <CardHeader>
             <CardTitle>Coaches</CardTitle>
           </CardHeader>
@@ -70,17 +71,20 @@ export default async function AdminPage() {
                     {coach.coachProfile?._count.clients ?? 0} clients
                   </span>
                   <StatusBadge status={coach.status} />
-                  <form
+                  <ConfirmForm
                     action={setCoachEnabledAction.bind(
                       null,
                       coach.id,
                       coach.status !== "ACTIVE",
                     )}
+                    message={`${
+                      coach.status === "ACTIVE" ? "Disable" : "Enable"
+                    } ${coach.firstName} ${coach.lastName}?`}
                   >
                     <Button size="sm" variant="outline">
                       {coach.status === "ACTIVE" ? "Disable" : "Enable"}
                     </Button>
-                  </form>
+                  </ConfirmForm>
                 </div>
               ))
             )}

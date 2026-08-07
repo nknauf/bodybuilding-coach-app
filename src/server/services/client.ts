@@ -112,6 +112,31 @@ export async function logExtraSet(actor: Actor, rawInput: unknown) {
   });
 }
 
+export async function removeExtraSet(actor: Actor, rawSetLogId: unknown) {
+  const clientId = requireClientProfileId(actor);
+  const setLogId = uuidSchema.parse(rawSetLogId);
+  return db.$transaction(async (tx) => {
+    const log = await tx.workoutSetLog.findFirst({
+      where: {
+        id: setLogId,
+        clientId,
+        isExtra: true,
+        workout: { finalizedAt: null, client: { userId: actor.id } },
+      },
+    });
+    if (!log) throw new AuthorizationError();
+    await tx.workoutSetLog.delete({ where: { id: log.id } });
+    await writeAudit(tx, {
+      actorUserId: actor.id,
+      actorRole: actor.role,
+      action: "EXTRA_WORKOUT_SET_REMOVED",
+      entityType: "WORKOUT_SET_LOG",
+      entityId: log.id,
+      oldValue: { workoutId: log.workoutId, isExtra: true },
+    });
+  });
+}
+
 export async function finalizeWorkout(actor: Actor, rawWorkoutId: unknown) {
   const clientId = requireClientProfileId(actor);
   const workoutId = uuidSchema.parse(rawWorkoutId);

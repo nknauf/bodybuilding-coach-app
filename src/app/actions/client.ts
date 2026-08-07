@@ -9,6 +9,7 @@ import {
   logAssignedSet,
   logBodyweight,
   logExtraSet,
+  removeExtraSet,
   rescheduleEvent,
   saveWorkoutNotes,
 } from "@/server/services/client";
@@ -58,6 +59,15 @@ export async function logExtraSetAction(
   } catch (error) {
     return actionError(error);
   }
+}
+
+export async function removeExtraSetAction(
+  workoutId: string,
+  setLogId: string,
+): Promise<void> {
+  const actor = await requireActor(["CLIENT"]);
+  await removeExtraSet(actor, setLogId);
+  revalidatePath(`/client/workouts/${workoutId}`);
 }
 
 export async function finalizeWorkoutAction(workoutId: string): Promise<void> {
@@ -140,7 +150,7 @@ export async function saveWorkoutNotesAction(
     const actor = await requireActor(["CLIENT"]);
     await saveWorkoutNotes(actor, {
       workoutId,
-      exerciseId,
+      exerciseId: exerciseId || undefined,
       workoutNotes: formData.get("workoutNotes") || undefined,
       exerciseNotes: formData.get("exerciseNotes") || undefined,
     });

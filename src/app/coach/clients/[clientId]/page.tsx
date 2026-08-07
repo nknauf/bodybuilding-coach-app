@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { formatInTimeZone } from "date-fns-tz";
 import { requireActor } from "@/server/auth/current-user";
 import { requireCoachProfileId } from "@/server/auth/authorization";
 import { AuthorizationError } from "@/server/auth/errors";
@@ -9,6 +10,7 @@ import {
   scheduleSupplementAction,
   scheduleWorkoutAction,
 } from "@/app/actions/coach";
+import { MealBuilder, WorkoutBuilder } from "@/components/coach-schedule-forms";
 import { MutationForm } from "@/components/mutation-form";
 import { StatusBadge } from "@/components/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,7 +18,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { WeightChart } from "@/components/weight-chart";
-import { formatInTimeZone } from "date-fns-tz";
 
 export default async function CoachClientPage({
   params,
@@ -32,51 +33,70 @@ export default async function CoachClientPage({
     if (error instanceof AuthorizationError) notFound();
     throw error;
   }
-  const exercises = await db.exercise.findMany({
-    where: {
-      isActive: true,
-      OR: [{ scope: "GLOBAL" }, { ownerCoachId: requireCoachProfileId(actor) }],
-    },
-    orderBy: { name: "asc" },
-  });
-  const recentSetLogs = await db.workoutSetLog.findMany({
-    where: {
-      clientId: report.profile.id,
-      status: "COMPLETED",
-      workout: { coachId: requireCoachProfileId(actor) },
-    },
-    include: {
-      workoutExercise: { select: { exerciseNameSnapshot: true } },
-    },
-    orderBy: { loggedAt: "desc" },
-    take: 20,
-  });
-  const chartPoints = report.weightTrend.points.map((point) => ({
-    date: formatInTimeZone(
-      point.measuredAt,
-      report.profile.user.timezone,
-      "MMM d",
-    ),
-    value: point.value,
-  }));
-  const scheduleAction = scheduleWorkoutAction.bind(null, clientId);
-  const mealAction = scheduleMealAction.bind(null, clientId);
-  const supplementAction = scheduleSupplementAction.bind(null, clientId);
+  const coachId = requireCoachProfileId(actor);
+  const [exercises, recentSetLogs] = await Promise.all([
+    db.exercise.findMany({
+      where: {
+        isActive: true,
+        OR: [{ scope: "GLOBAL" }, { ownerCoachId: coachId }],
+      },
+      select: { id: true, name: true, scope: true },
+      orderBy: { name: "asc" },
+    }),
+    db.workoutSetLog.findMany({
+      where: {
+        clientId: report.profile.id,
+        status: "COMPLETED",
+        workout: { coachId },
+      },
+      include: {
+        workoutExercise: { select: { exerciseNameSnapshot: true } },
+      },
+      orderBy: { loggedAt: "desc" },
+      take: 20,
+    }),
+  ]);
+  const events = [
+    ...report.workouts.map((item) => ({
+      id: item.id,
+      type: "Workout",
+      name: item.name,
+      at: item.scheduledAt,
+      status: item.effectiveStatus,
+    })),
+    ...report.meals.map((item) => ({
+      id: item.id,
+      type: "Meal",
+      name: item.name,
+      at: item.scheduledAt,
+      status: item.effectiveStatus,
+    })),
+    ...report.supplements.map((item) => ({
+      id: item.id,
+      type: "Supplement",
+      name: item.name,
+      at: item.scheduledAt,
+      status: item.effectiveStatus,
+    })),
+  ].toSorted((a, b) => a.at.getTime() - b.at.getTime());
 
   return (
     <div className="space-y-8">
-      <div>
+      <header>
         <p className="text-muted-foreground text-sm">Client overview</p>
-        <h1 className="text-3xl font-semibold tracking-tight">
-          {report.profile.user.firstName} {report.profile.user.lastName}
-        </h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-3xl font-semibold tracking-tight">
+            {report.profile.user.firstName} {report.profile.user.lastName}
+          </h1>
+          <StatusBadge status={report.profile.status} />
+        </div>
         <p className="text-muted-foreground mt-1 text-sm">
-          New assignments use the client’s local time (
-          {report.profile.user.timezone}) and are stored as UTC instants. Event
-          cards below render in your timezone ({actor.timezone}).
+          Scheduling uses {report.profile.user.timezone}; coach-facing event
+          times render in {actor.timezone}.
         </p>
-      </div>
-      <div className="grid gap-4 sm:grid-cols-4">
+      </header>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
           ["Overall", report.compliancePercent.overall],
           ["Workout", report.compliancePercent.workout],
@@ -93,36 +113,34 @@ export default async function CoachClientPage({
           </Card>
         ))}
       </div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        {[
+          ["Daily", report.streaks.daily],
+          ["Weekly", report.streaks.weekly],
+          ["Workout", report.streaks.workout],
+          ["Meal", report.streaks.meal],
+          ["Overall", report.streaks.overall],
+        ].map(([label, value]) => (
+          <Card key={label}>
+            <CardContent className="pt-4">
+              <p className="text-muted-foreground text-xs">{label} streak</p>
+              <p className="text-xl font-semibold">{value}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
       <Card>
         <CardHeader>
-          <CardTitle>This week’s events</CardTitle>
+          <CardTitle>This week&apos;s plan</CardTitle>
         </CardHeader>
-        <CardContent className="grid gap-3 lg:grid-cols-3">
-          {[
-            ...report.workouts.map((item) => ({
-              id: item.id,
-              type: "Workout",
-              name: item.name,
-              at: item.scheduledAt,
-              status: item.effectiveStatus,
-            })),
-            ...report.meals.map((item) => ({
-              id: item.id,
-              type: "Meal",
-              name: item.name,
-              at: item.scheduledAt,
-              status: item.effectiveStatus,
-            })),
-            ...report.supplements.map((item) => ({
-              id: item.id,
-              type: "Supplement",
-              name: item.name,
-              at: item.scheduledAt,
-              status: item.effectiveStatus,
-            })),
-          ]
-            .toSorted((a, b) => a.at.getTime() - b.at.getTime())
-            .map((event) => (
+        <CardContent className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {events.length === 0 ? (
+            <p className="text-muted-foreground text-sm">
+              Nothing scheduled this week.
+            </p>
+          ) : (
+            events.map((event) => (
               <div
                 key={`${event.type}-${event.id}`}
                 className="rounded-lg border p-3"
@@ -142,25 +160,82 @@ export default async function CoachClientPage({
                   )}
                 </time>
               </div>
-            ))}
+            ))
+          )}
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Build a workout</CardTitle>
+          <p className="text-muted-foreground text-sm">
+            Add and reorder exercises, then define each assigned set.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <WorkoutBuilder
+            action={scheduleWorkoutAction.bind(null, clientId)}
+            exercises={exercises}
+          />
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-6 xl:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Schedule meal</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <MealBuilder action={scheduleMealAction.bind(null, clientId)} />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Schedule supplement</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <MutationForm
+              action={scheduleSupplementAction.bind(null, clientId)}
+              submitLabel="Schedule supplement"
+              className="space-y-4"
+            >
+              <Field name="name" label="Supplement" />
+              <Field name="dosageText" label="Assigned dosage" />
+              <Field
+                name="scheduledAt"
+                label="Client-local date and time"
+                type="datetime-local"
+              />
+              <label className="space-y-1.5">
+                <span className="text-sm font-medium">Coach notes</span>
+                <Textarea name="coachNotes" maxLength={1000} />
+              </label>
+            </MutationForm>
+          </CardContent>
+        </Card>
+      </div>
+
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>30-day bodyweight</CardTitle>
           </CardHeader>
           <CardContent>
-            <WeightChart points={chartPoints} />
+            <WeightChart
+              points={report.weightTrend.points.map((point) => ({
+                date: formatInTimeZone(
+                  point.measuredAt,
+                  report.profile.user.timezone,
+                  "MMM d",
+                ),
+                value: point.value,
+              }))}
+            />
           </CardContent>
         </Card>
         <Card>
           <CardHeader>
             <CardTitle>Recent exercise performance</CardTitle>
-            <p className="text-muted-foreground text-sm">
-              Latest 20 completed set logs; extra sets remain visibly separate
-              in workout detail.
-            </p>
           </CardHeader>
           <CardContent className="space-y-2">
             {recentSetLogs.length === 0 ? (
@@ -195,118 +270,6 @@ export default async function CoachClientPage({
           </CardContent>
         </Card>
       </div>
-      <div className="grid gap-6 xl:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle>Schedule workout</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <MutationForm
-              action={scheduleAction}
-              submitLabel="Schedule workout"
-              className="space-y-3"
-            >
-              <Field name="name" label="Workout name" />
-              <Field
-                name="scheduledAt"
-                label="Client-local date and time"
-                type="datetime-local"
-              />
-              <Field
-                name="durationMinutes"
-                label="Duration (minutes)"
-                type="number"
-              />
-              <div className="space-y-1.5">
-                <Label htmlFor="exerciseId">Exercise</Label>
-                <select
-                  id="exerciseId"
-                  name="exerciseId"
-                  className="bg-background h-9 w-full rounded-lg border px-2 text-sm"
-                >
-                  {exercises.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <Field
-                name="expectedReps"
-                label="Reps per set (comma separated)"
-                defaultValue="8, 8, 8"
-              />
-              <div className="space-y-1.5">
-                <Label htmlFor="notes">Notes</Label>
-                <Textarea id="notes" name="notes" maxLength={2000} />
-              </div>
-            </MutationForm>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Schedule meal</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <MutationForm
-              action={mealAction}
-              submitLabel="Schedule meal"
-              className="space-y-3"
-            >
-              <Field name="name" label="Meal name" />
-              <Field
-                name="scheduledAt"
-                label="Client-local date and time"
-                type="datetime-local"
-              />
-              <Field
-                name="expectedCalories"
-                label="Calories (optional)"
-                type="number"
-                required={false}
-              />
-              <Field
-                name="expectedProteinGrams"
-                label="Protein grams"
-                type="number"
-                required={false}
-              />
-              <Field
-                name="expectedCarbGrams"
-                label="Carbohydrate grams"
-                type="number"
-                required={false}
-              />
-              <Field
-                name="expectedFatGrams"
-                label="Fat grams"
-                type="number"
-                required={false}
-              />
-            </MutationForm>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Schedule supplement</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <MutationForm
-              action={supplementAction}
-              submitLabel="Schedule supplement"
-              className="space-y-3"
-            >
-              <Field name="name" label="Supplement" />
-              <Field name="dosageText" label="Assigned dosage" />
-              <Field
-                name="scheduledAt"
-                label="Client-local date and time"
-                type="datetime-local"
-              />
-            </MutationForm>
-          </CardContent>
-        </Card>
-      </div>
     </div>
   );
 }
@@ -315,25 +278,15 @@ function Field({
   name,
   label,
   type = "text",
-  defaultValue,
-  required = true,
 }: {
   name: string;
   label: string;
   type?: string;
-  defaultValue?: string;
-  required?: boolean;
 }) {
   return (
     <div className="space-y-1.5">
       <Label htmlFor={name}>{label}</Label>
-      <Input
-        id={name}
-        name={name}
-        type={type}
-        defaultValue={defaultValue}
-        required={required}
-      />
+      <Input id={name} name={name} type={type} required />
     </div>
   );
 }

@@ -5,9 +5,11 @@ import { requireActor } from "@/server/auth/current-user";
 import {
   createCoachExercise,
   provisionClient,
+  retryClientInvitation,
   scheduleMeal,
   scheduleSupplement,
   scheduleWorkout,
+  setClientStatus,
 } from "@/server/services/coach";
 import type { ActionState } from "./state";
 import { actionError } from "./state";
@@ -18,15 +20,53 @@ export async function provisionClientAction(
 ): Promise<ActionState> {
   try {
     const actor = await requireActor(["COACH"]);
-    await provisionClient(actor, Object.fromEntries(formData));
+    const result = await provisionClient(actor, Object.fromEntries(formData));
     revalidatePath("/coach");
     return {
       ok: true,
-      message: "Client provisioned. Ask them to sign up with the same email.",
+      message:
+        result.deliveryMethod === "CLERK_EMAIL"
+          ? "Invitation email requested. You can also copy the link."
+          : "Client provisioned. Copy and send the manual invitation link.",
+      inviteUrl: result.inviteUrl,
     };
   } catch (error) {
     return actionError(error);
   }
+}
+
+export async function retryClientInvitationAction(
+  inviteId: string,
+  _state: ActionState,
+  _formData: FormData,
+): Promise<ActionState> {
+  void _state;
+  void _formData;
+  try {
+    const actor = await requireActor(["COACH"]);
+    const result = await retryClientInvitation(actor, inviteId);
+    revalidatePath("/coach");
+    return {
+      ok: true,
+      message:
+        result.deliveryMethod === "CLERK_EMAIL"
+          ? "Invitation email requested again."
+          : "Manual invitation regenerated.",
+      inviteUrl: result.inviteUrl,
+    };
+  } catch (error) {
+    return actionError(error);
+  }
+}
+
+export async function setClientStatusAction(
+  clientId: string,
+  status: "ACTIVE" | "INACTIVE" | "ARCHIVED",
+): Promise<void> {
+  const actor = await requireActor(["COACH"]);
+  await setClientStatus(actor, clientId, status);
+  revalidatePath("/coach");
+  revalidatePath(`/coach/clients/${clientId}`);
 }
 
 export async function createExerciseAction(
@@ -50,24 +90,12 @@ export async function scheduleWorkoutAction(
 ): Promise<ActionState> {
   try {
     const actor = await requireActor(["COACH"]);
-    const reps = String(formData.get("expectedReps") ?? "")
-      .split(",")
-      .map((value) => Number(value.trim()))
-      .filter((value) => Number.isFinite(value));
-    await scheduleWorkout(actor, {
-      clientId,
-      name: formData.get("name"),
-      notes: formData.get("notes") || undefined,
-      durationMinutes: formData.get("durationMinutes"),
-      scheduledAt: formData.get("scheduledAt"),
-      exercises: [
-        {
-          exerciseId: formData.get("exerciseId"),
-          expectedReps: reps,
-        },
-      ],
-    });
+    const payload = JSON.parse(
+      String(formData.get("payload") ?? "{}"),
+    ) as unknown;
+    await scheduleWorkout(actor, { ...(payload as object), clientId });
     revalidatePath(`/coach/clients/${clientId}`);
+    revalidatePath("/coach/schedule");
     return { ok: true, message: "Workout scheduled." };
   } catch (error) {
     return actionError(error);
@@ -81,11 +109,12 @@ export async function scheduleMealAction(
 ): Promise<ActionState> {
   try {
     const actor = await requireActor(["COACH"]);
-    await scheduleMeal(actor, {
-      ...Object.fromEntries(formData),
-      clientId,
-    });
+    const payload = JSON.parse(
+      String(formData.get("payload") ?? "{}"),
+    ) as unknown;
+    await scheduleMeal(actor, { ...(payload as object), clientId });
     revalidatePath(`/coach/clients/${clientId}`);
+    revalidatePath("/coach/schedule");
     return { ok: true, message: "Meal scheduled." };
   } catch (error) {
     return actionError(error);

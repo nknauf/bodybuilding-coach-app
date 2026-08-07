@@ -34,6 +34,11 @@ enum InviteStatus {
   REVOKED
 }
 
+enum InviteDeliveryMethod {
+  CLERK_EMAIL
+  MANUAL_LINK
+}
+
 enum ExerciseScope {
   GLOBAL
   COACH
@@ -105,6 +110,7 @@ model User {
   auditLogs       AuditLog[]        @relation("AuditActor")
   reschedules     EventReschedule[]
   bodyMetricsMade BodyMetric[]      @relation("BodyMetricCreator")
+  clientInvites   ClientInvite[]    @relation("InvitedClientUser")
 
   @@index([role, status])
   @@index([deletedAt])
@@ -163,21 +169,28 @@ model ClientCoachHistory {
 }
 
 model ClientInvite {
-  id         String       @id @default(uuid()) @db.Uuid
-  coachId    String       @db.Uuid
-  email      String
-  firstName  String
-  lastName   String
-  timezone   String
-  tokenHash  String       @unique
-  status     InviteStatus @default(PENDING)
-  expiresAt  DateTime
-  acceptedAt DateTime?
-  createdAt  DateTime     @default(now())
-  updatedAt  DateTime     @updatedAt
-  coach      CoachProfile @relation(fields: [coachId], references: [id], onDelete: Restrict)
+  id                String                @id @default(uuid()) @db.Uuid
+  coachId           String                @db.Uuid
+  clientUserId      String?               @db.Uuid
+  email             String
+  firstName         String
+  lastName          String
+  timezone          String
+  tokenHash         String                @unique
+  status            InviteStatus          @default(PENDING)
+  deliveryMethod    InviteDeliveryMethod?
+  clerkInvitationId String?               @unique
+  deliveryError     String?
+  lastDeliveredAt   DateTime?
+  expiresAt         DateTime
+  acceptedAt        DateTime?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  coach             CoachProfile          @relation(fields: [coachId], references: [id], onDelete: Restrict)
+  clientUser        User?                 @relation("InvitedClientUser", fields: [clientUserId], references: [id], onDelete: Restrict)
 
   @@index([coachId, status])
+  @@index([clientUserId, status])
   @@index([email, status])
 }
 
@@ -327,6 +340,7 @@ model SupplementEvent {
   name                String
   dosageText          String
   clientNote          String?
+  coachNotes          String?
   originalScheduledAt DateTime
   scheduledAt         DateTime
   scheduleTimezone    String

@@ -4,6 +4,7 @@ import { AuthorizationError } from "@/server/auth/errors";
 export interface ActionState {
   ok: boolean;
   message: string;
+  inviteUrl?: string;
 }
 
 export const initialActionState: ActionState = { ok: false, message: "" };

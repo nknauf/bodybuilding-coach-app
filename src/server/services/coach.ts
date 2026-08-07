@@ -2,6 +2,7 @@ import "server-only";
 
 import { createHash, randomBytes } from "node:crypto";
 import { addDays, subHours } from "date-fns";
+import { clerkClient } from "@clerk/nextjs/server";
 import { db } from "@/server/db/client";
 import type { Actor } from "@/server/auth/authorization";
 import { assertRole, requireCoachProfileId } from "@/server/auth/authorization";
@@ -9,6 +10,8 @@ import { AuthorizationError } from "@/server/auth/errors";
 import { requireAccessibleClient } from "@/server/auth/scopes";
 import { writeAudit } from "@/server/audit/write-audit";
 import { localDateTimeToUtc } from "@/server/domain/time";
+import { getServerEnv } from "@/lib/env";
+import { userStatusForClientStatus } from "@/server/domain/client-lifecycle";
 import {
   createClientSchema,
   exerciseSchema,
@@ -60,6 +63,7 @@ export async function provisionClient(actor: Actor, rawInput: unknown) {
     const invite = await tx.clientInvite.create({
       data: {
         coachId,
+        clientUserId: user.id,
         email: input.email,
         firstName: input.firstName,
         lastName: input.lastName,
@@ -82,7 +86,113 @@ export async function provisionClient(actor: Actor, rawInput: unknown) {
     });
     return { user, invite };
   });
-  return { ...result, developmentToken: token };
+  const delivery = await deliverInvitation(actor, result.invite.id, token);
+  return { ...result, ...delivery };
+}
+
+async function deliverInvitation(
+  actor: Actor,
+  inviteId: string,
+  manualToken: string,
+) {
+  const coachId = requireCoachProfileId(actor);
+  const invite = await db.clientInvite.findFirst({
+    where: { id: inviteId, coachId, status: "PENDING" },
+  });
+  if (!invite) throw new AuthorizationError();
+  const env = getServerEnv();
+  const appUrl = env.APP_URL?.replace(/\/$/, "") ?? "http://localhost:3000";
+  const manualUrl = `${appUrl}/join/${manualToken}`;
+
+  if (!env.CLERK_SECRET_KEY) {
+    await db.clientInvite.update({
+      where: { id: invite.id },
+      data: {
+        deliveryMethod: "MANUAL_LINK",
+        deliveryError: null,
+        lastDeliveredAt: new Date(),
+      },
+    });
+    return { inviteUrl: manualUrl, deliveryMethod: "MANUAL_LINK" as const };
+  }
+
+  try {
+    const client = await clerkClient();
+    if (invite.clerkInvitationId) {
+      try {
+        await client.invitations.revokeInvitation(invite.clerkInvitationId);
+      } catch {
+        // A previously accepted/expired invitation is already unusable.
+      }
+    }
+    const clerkInvite = await client.invitations.createInvitation({
+      emailAddress: invite.email,
+      expiresInDays: 7,
+      notify: true,
+      redirectUrl: `${appUrl}/sign-up`,
+      publicMetadata: {
+        applicationInviteId: invite.id,
+        applicationUserId: invite.clientUserId,
+      },
+    });
+    await db.clientInvite.update({
+      where: { id: invite.id },
+      data: {
+        clerkInvitationId: clerkInvite.id,
+        deliveryMethod: "CLERK_EMAIL",
+        deliveryError: null,
+        lastDeliveredAt: new Date(),
+      },
+    });
+    return {
+      inviteUrl: clerkInvite.url ?? manualUrl,
+      deliveryMethod: "CLERK_EMAIL" as const,
+    };
+  } catch {
+    await db.clientInvite.update({
+      where: { id: invite.id },
+      data: {
+        deliveryMethod: "MANUAL_LINK",
+        deliveryError: "Clerk delivery unavailable; use the manual link.",
+        lastDeliveredAt: new Date(),
+      },
+    });
+    return { inviteUrl: manualUrl, deliveryMethod: "MANUAL_LINK" as const };
+  }
+}
+
+export async function retryClientInvitation(
+  actor: Actor,
+  rawInviteId: unknown,
+) {
+  const coachId = requireCoachProfileId(actor);
+  const inviteId = uuidSchema.parse(rawInviteId);
+  const token = randomBytes(24).toString("base64url");
+  const tokenHash = createHash("sha256").update(token).digest("hex");
+  const invite = await db.$transaction(async (tx) => {
+    const existing = await tx.clientInvite.findFirst({
+      where: { id: inviteId, coachId, status: "PENDING" },
+    });
+    if (!existing) throw new AuthorizationError();
+    const updated = await tx.clientInvite.update({
+      where: { id: existing.id },
+      data: {
+        tokenHash,
+        expiresAt: addDays(new Date(), 7),
+        deliveryError: null,
+      },
+    });
+    await writeAudit(tx, {
+      actorUserId: actor.id,
+      actorRole: actor.role,
+      action: "CLIENT_INVITATION_RETRIED",
+      entityType: "CLIENT_INVITE",
+      entityId: existing.id,
+      newValue: { expiresAt: updated.expiresAt.toISOString() },
+    });
+    return updated;
+  });
+  return deliverInvitation(actor, invite.id, token);
 }
 
 export async function setClientStatus(
@@ -90,18 +200,28 @@ export async function setClientStatus(
   rawClientId: unknown,
   status: "ACTIVE" | "INACTIVE" | "ARCHIVED",
 ) {
+  const coachId = requireCoachProfileId(actor);
   const clientId = uuidSchema.parse(rawClientId);
   return db.$transaction(async (tx) => {
-    const client = await requireAccessibleClient(tx, actor, clientId);
+    const client = await tx.clientProfile.findFirst({
+      where: {
+        id: clientId,
+        coachId,
+        user: { deletedAt: null },
+      },
+      include: { user: true },
+    });
+    if (!client) throw new AuthorizationError();
     const updated = await tx.clientProfile.update({
       where: { id: client.id },
       data: {
         status,
         archivedAt: status === "ARCHIVED" ? new Date() : null,
-        user:
-          status === "ARCHIVED"
-            ? { update: { status: "ARCHIVED" } }
-            : undefined,
+        user: {
+          update: {
+            status: userStatusForClientStatus(status),
+          },
+        },
       },
     });
     await writeAudit(tx, {
@@ -223,15 +343,24 @@ export async function scheduleMeal(actor: Actor, rawInput: unknown) {
       input.scheduledAt,
       client.user.timezone,
     );
+    const { ingredients, ...mealInput } = input;
     const meal = await tx.mealEvent.create({
       data: {
-        ...input,
+        ...mealInput,
         scheduledAt,
         coachId,
         clientId: client.id,
         originalScheduledAt: scheduledAt,
         scheduleTimezone: client.user.timezone,
+        ingredients: {
+          create: ingredients.map((ingredient, orderIndex) => ({
+            name: ingredient.name,
+            amount: ingredient.amount ?? "",
+            orderIndex,
+          })),
+        },
       },
+      include: { ingredients: { orderBy: { orderIndex: "asc" } } },
     });
     await writeAudit(tx, {
       actorUserId: actor.id,

@@ -7,9 +7,11 @@ import {
   finalizeWorkoutAction,
   logExtraSetAction,
   logSetAction,
+  removeExtraSetAction,
   saveWorkoutNotesAction,
 } from "@/app/actions/client";
 import { MutationForm } from "@/components/mutation-form";
+import { ConfirmForm } from "@/components/confirm-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,7 +42,7 @@ export default async function WorkoutPage({
   );
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <div>
+      <header>
         <p className="text-muted-foreground text-sm">
           {formatInTimeZone(
             workout.scheduledAt,
@@ -48,7 +50,7 @@ export default async function WorkoutPage({
             "EEEE, MMMM d · p zzz",
           )}
         </p>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-3xl font-semibold tracking-tight">
             {workout.name}
           </h1>
@@ -57,7 +59,32 @@ export default async function WorkoutPage({
         {workout.notes ? (
           <p className="text-muted-foreground mt-2">{workout.notes}</p>
         ) : null}
-      </div>
+      </header>
+
+      {!workout.finalizedAt ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Your workout note</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <MutationForm
+              action={saveWorkoutNotesAction.bind(null, workout.id, "")}
+              submitLabel="Save workout note"
+              className="space-y-3"
+            >
+              <Textarea
+                name="workoutNotes"
+                aria-label="Workout note"
+                defaultValue={workout.clientNotes ?? ""}
+                maxLength={2000}
+              />
+            </MutationForm>
+          </CardContent>
+        </Card>
+      ) : workout.clientNotes ? (
+        <p className="rounded-lg border p-4 text-sm">{workout.clientNotes}</p>
+      ) : null}
+
       {workout.exercises.map((exercise) => (
         <Card key={exercise.id}>
           <CardHeader>
@@ -76,88 +103,101 @@ export default async function WorkoutPage({
                   workout.id,
                   exercise.id,
                 )}
-                submitLabel="Save notes"
-                className="bg-muted/40 grid gap-3 rounded-lg p-3 sm:grid-cols-2"
+                submitLabel="Save exercise note"
+                className="bg-muted/40 space-y-3 rounded-lg p-3"
               >
-                <div className="space-y-1.5">
-                  <Label>Workout note</Label>
-                  <Textarea
-                    name="workoutNotes"
-                    defaultValue={workout.clientNotes ?? ""}
-                    maxLength={2000}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Exercise note</Label>
+                <input
+                  type="hidden"
+                  name="workoutNotes"
+                  value={workout.clientNotes ?? ""}
+                />
+                <Label>
+                  Exercise note
                   <Textarea
                     name="exerciseNotes"
+                    className="mt-1.5"
                     defaultValue={exercise.clientNotes ?? ""}
                     maxLength={1000}
                   />
-                </div>
+                </Label>
               </MutationForm>
+            ) : exercise.clientNotes ? (
+              <p className="text-muted-foreground text-sm">
+                {exercise.clientNotes}
+              </p>
             ) : null}
-            {exercise.assignedSets.map((set) => {
-              const action = logSetAction.bind(null, workout.id, set.id);
-              return (
-                <div key={set.id} className="rounded-lg border p-3">
-                  <div className="mb-3 flex items-center justify-between">
-                    <p className="font-medium">
-                      Set {set.orderIndex + 1} · {set.expectedReps} reps
-                      expected
-                    </p>
-                    {set.log ? <StatusBadge status={set.log.status} /> : null}
-                  </div>
-                  {workout.finalizedAt ? (
-                    <p className="text-muted-foreground text-sm">
-                      {set.log
-                        ? `${set.log.actualReps ?? "—"} reps · ${set.log.actualWeight?.toString() ?? "—"} ${set.log.weightUnit ?? ""}`
-                        : "Not logged"}
-                    </p>
-                  ) : (
-                    <MutationForm
-                      action={action}
-                      submitLabel="Save set"
-                      className="grid gap-3 sm:grid-cols-4 sm:items-end"
-                    >
-                      <Select
-                        name="status"
-                        label="Status"
-                        values={["COMPLETED", "SKIPPED"]}
-                      />
-                      <Field
-                        name="actualReps"
-                        label="Actual reps"
-                        type="number"
-                        defaultValue={set.log?.actualReps?.toString()}
-                      />
-                      <Field
-                        name="actualWeight"
-                        label="Weight"
-                        type="number"
-                        step="0.1"
-                        defaultValue={set.log?.actualWeight?.toString()}
-                        required={false}
-                      />
-                      <Select
-                        name="weightUnit"
-                        label="Unit"
-                        values={["LB", "KG"]}
-                      />
-                    </MutationForm>
-                  )}
+
+            {exercise.assignedSets.map((set) => (
+              <div key={set.id} className="rounded-xl border p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <p className="font-medium">
+                    Set {set.orderIndex + 1} · {set.expectedReps} reps expected
+                  </p>
+                  {set.log ? <StatusBadge status={set.log.status} /> : null}
                 </div>
-              );
-            })}
+                {workout.finalizedAt ? (
+                  <p className="text-muted-foreground text-sm">
+                    {set.log
+                      ? `${set.log.actualReps ?? "—"} reps · ${set.log.actualWeight?.toString() ?? "—"} ${set.log.weightUnit ?? ""}`
+                      : "Not logged"}
+                  </p>
+                ) : (
+                  <MutationForm
+                    action={logSetAction.bind(null, workout.id, set.id)}
+                    submitLabel="Save set"
+                    className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:items-end"
+                  >
+                    <Select
+                      name="status"
+                      label="Set status"
+                      values={["COMPLETED", "SKIPPED"]}
+                    />
+                    <Field
+                      name="actualReps"
+                      label="Actual reps"
+                      type="number"
+                      defaultValue={set.log?.actualReps?.toString()}
+                    />
+                    <Field
+                      name="actualWeight"
+                      label="Weight"
+                      type="number"
+                      step="0.1"
+                      defaultValue={set.log?.actualWeight?.toString()}
+                      required={false}
+                    />
+                    <Select
+                      name="weightUnit"
+                      label="Unit"
+                      values={["LB", "KG"]}
+                    />
+                  </MutationForm>
+                )}
+              </div>
+            ))}
+
             {exercise.setLogs.map((set, index) => (
               <div
                 key={set.id}
-                className="rounded-lg border border-dashed p-3 text-sm"
+                className="flex items-center justify-between gap-3 rounded-lg border border-dashed p-3 text-sm"
               >
-                Extra set {index + 1}: {set.actualReps ?? "—"} reps ·{" "}
-                {set.actualWeight?.toString() ?? "—"} {set.weightUnit ?? ""}
+                <span>
+                  Extra set {index + 1}: {set.actualReps ?? "—"} reps ·{" "}
+                  {set.actualWeight?.toString() ?? "—"} {set.weightUnit ?? ""}
+                </span>
+                {!workout.finalizedAt ? (
+                  <ConfirmForm
+                    action={removeExtraSetAction.bind(null, workout.id, set.id)}
+                    message="Remove this extra set?"
+                  >
+                    <Button type="submit" size="xs" variant="destructive">
+                      Remove
+                    </Button>
+                  </ConfirmForm>
+                ) : null}
               </div>
             ))}
+
             {!workout.finalizedAt ? (
               <MutationForm
                 action={logExtraSetAction.bind(null, workout.id, exercise.id)}
@@ -178,17 +218,25 @@ export default async function WorkoutPage({
           </CardContent>
         </Card>
       ))}
+
       {!workout.finalizedAt ? (
-        <form action={finalizeWorkoutAction.bind(null, workout.id)}>
-          <Button size="lg" disabled={logCount < 1}>
+        <ConfirmForm
+          action={finalizeWorkoutAction.bind(null, workout.id)}
+          message="Finalize this workout? You will not be able to edit it afterward."
+        >
+          <Button type="submit" size="lg" disabled={logCount < 1}>
             Finalize workout
           </Button>
           {logCount < 1 ? (
             <p className="text-muted-foreground mt-2 text-sm">
               Log at least one assigned or extra set before finalizing.
             </p>
-          ) : null}
-        </form>
+          ) : (
+            <p className="text-muted-foreground mt-2 text-sm">
+              Finalization permanently locks set logs and notes.
+            </p>
+          )}
+        </ConfirmForm>
       ) : (
         <p className="bg-muted/50 rounded-lg border p-4 text-sm">
           This workout is final and cannot be edited.
@@ -214,8 +262,8 @@ function Field({
   required?: boolean;
 }) {
   return (
-    <div className="space-y-1.5">
-      <Label htmlFor={`${name}-${defaultValue ?? ""}`}>{label}</Label>
+    <label className="space-y-1.5">
+      <span className="text-sm font-medium">{label}</span>
       <Input
         name={name}
         type={type}
@@ -223,7 +271,7 @@ function Field({
         defaultValue={defaultValue}
         required={required}
       />
-    </div>
+    </label>
   );
 }
 
@@ -237,16 +285,16 @@ function Select({
   values: string[];
 }) {
   return (
-    <div className="space-y-1.5">
-      <Label>{label}</Label>
+    <label className="space-y-1.5">
+      <span className="text-sm font-medium">{label}</span>
       <select
         name={name}
-        className="bg-background h-9 w-full rounded-lg border px-2 text-sm"
+        className="bg-background h-10 w-full rounded-lg border px-3 text-sm"
       >
         {values.map((value) => (
           <option key={value}>{value}</option>
         ))}
       </select>
-    </div>
+    </label>
   );
 }

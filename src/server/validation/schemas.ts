@@ -76,12 +76,24 @@ export const mealSchema = scheduledBase.extend({
   ),
   expectedCarbGrams: optionalNumber(z.coerce.number().int().min(0).max(3000)),
   expectedFatGrams: optionalNumber(z.coerce.number().int().min(0).max(1000)),
+  ingredients: z
+    .array(
+      z.object({
+        name: boundedText(120),
+        amount: z.string().trim().max(120).optional(),
+      }),
+    )
+    .max(50)
+    .default([]),
 });
 
 export const supplementSchema = scheduledBase.extend({
   name: boundedText(120),
   dosageText: boundedText(200),
+  coachNotes: z.string().trim().max(1000).optional(),
 });
+
+export const clientStatusSchema = z.enum(["ACTIVE", "INACTIVE", "ARCHIVED"]);
 
 export const setLogSchema = z.object({
   workoutId: uuidSchema,

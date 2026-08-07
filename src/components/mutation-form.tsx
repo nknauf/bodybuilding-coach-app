@@ -20,15 +20,24 @@ export function MutationForm({
   submitLabel,
   children,
   className,
+  confirmMessage,
 }: {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>;
   submitLabel: string;
   children: ReactNode;
   className?: string;
+  confirmMessage?: string;
 }) {
   const [state, dispatch] = useActionState(action, initialActionState);
   return (
-    <form action={dispatch} className={className}>
+    <form
+      action={dispatch}
+      className={className}
+      onSubmit={(event) => {
+        if (confirmMessage && !window.confirm(confirmMessage))
+          event.preventDefault();
+      }}
+    >
       {children}
       <div className="flex items-center gap-3">
         <SubmitButton label={submitLabel} />
@@ -44,6 +53,24 @@ export function MutationForm({
           </p>
         ) : null}
       </div>
+      {state.inviteUrl ? (
+        <div className="bg-muted/40 rounded-lg border p-3">
+          <label className="text-sm font-medium" htmlFor="invitation-link">
+            Invitation link
+          </label>
+          <input
+            id="invitation-link"
+            className="bg-background mt-1 h-10 w-full rounded-lg border px-3 text-sm"
+            value={state.inviteUrl}
+            readOnly
+            onFocus={(event) => event.currentTarget.select()}
+          />
+          <p className="text-muted-foreground mt-1 text-xs">
+            Select and copy this link. Manual links are shown only when created
+            or regenerated.
+          </p>
+        </div>
+      ) : null}
     </form>
   );
 }

@@ -12,8 +12,11 @@ export default async function CoachLayout({
     <AppShell
       role="Coach"
       navigation={[
-        { href: "/coach", label: "Clients" },
+        { href: "/coach", label: "Overview" },
+        { href: "/coach#clients", label: "Clients" },
+        { href: "/coach#schedule", label: "Schedule" },
         { href: "/coach/exercises", label: "Exercises" },
+        { href: "/coach#compliance", label: "Compliance" },
       ]}
     >
       {children}

@@ -12,7 +12,9 @@ export default async function AdminLayout({
     <AppShell
       role="Admin"
       navigation={[
-        { href: "/admin", label: "Platform" },
+        { href: "/admin", label: "Overview" },
+        { href: "/admin#coaches", label: "Coaches" },
+        { href: "/admin/clients", label: "Clients" },
         { href: "/admin/audit", label: "Audit log" },
       ]}
     >

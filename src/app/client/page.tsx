@@ -95,6 +95,8 @@ export default async function ClientPage({
     const key = localDayKey(event.at, timezone);
     eventsByDay.set(key, [...(eventsByDay.get(key) ?? []), event]);
   }
+  const todayKey = localDayKey(now, timezone);
+  const todayEvents = eventsByDay.get(todayKey) ?? [];
   const chartPoints = report.weightTrend.points.map((point) => ({
     date: formatInTimeZone(point.measuredAt, timezone, "MMM d"),
     value: point.value,
@@ -107,15 +109,53 @@ export default async function ClientPage({
           <p className="text-muted-foreground text-sm">
             {formatInTimeZone(new Date(), timezone, "EEEE, MMMM d")}
           </p>
-          <h1 className="text-3xl font-semibold tracking-tight">
-            Your training week
-          </h1>
-        </div>
-        <div className="bg-card rounded-xl border px-5 py-3">
-          <p className="text-muted-foreground text-xs">Daily no-miss streak</p>
-          <p className="text-2xl font-semibold">{report.dailyStreak} days</p>
+          <h1 className="text-3xl font-semibold tracking-tight">Today</h1>
         </div>
       </div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        {[
+          ["Daily", report.streaks.daily, "Applicable days without a miss"],
+          ["Weekly", report.streaks.weekly, "Weeks at 90% or better"],
+          ["Workout", report.streaks.workout, "Completed workouts in a row"],
+          ["Meal", report.streaks.meal, "Completed meals in a row"],
+          [
+            "Overall",
+            report.streaks.overall,
+            "Days each assigned category hit 80%",
+          ],
+        ].map(([label, value, help]) => (
+          <Card key={label}>
+            <CardContent className="pt-4">
+              <p className="text-muted-foreground text-xs">{label} streak</p>
+              <p className="text-2xl font-semibold">{value} days</p>
+              <p className="text-muted-foreground mt-1 text-xs">{help}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-semibold">Today&apos;s plan</h2>
+          <p className="text-muted-foreground text-xs">{timezone}</p>
+        </div>
+        {todayEvents.length === 0 ? (
+          <Card>
+            <CardContent className="text-muted-foreground py-8 text-center text-sm">
+              Nothing assigned today.
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {todayEvents.map((event) => (
+              <EventCard
+                key={`today-${event.kind}-${event.id}`}
+                event={event}
+                timezone={timezone}
+              />
+            ))}
+          </div>
+        )}
+      </section>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="col-span-full flex flex-wrap gap-2">
           {[
@@ -152,7 +192,7 @@ export default async function ClientPage({
           </Card>
         ))}
       </div>
-      <section>
+      <section id="calendar" className="scroll-mt-24">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-xl font-semibold">Monday–Sunday</h2>
           <p className="text-muted-foreground text-xs">{timezone}</p>
@@ -189,8 +229,11 @@ export default async function ClientPage({
           })}
         </div>
       </section>
-      <div className="grid gap-6 lg:grid-cols-[1fr_22rem]">
-        <Card>
+      <div
+        id="progress"
+        className="grid scroll-mt-24 gap-6 lg:grid-cols-[1fr_22rem]"
+      >
+        <Card id="bodyweight" className="scroll-mt-24">
           <CardHeader>
             <CardTitle>Bodyweight trend</CardTitle>
             <p className="text-muted-foreground text-sm">

@@ -11,6 +11,11 @@ import { calculateWeightTrend } from "@/server/domain/bodyweight";
 import { mondayWeekUtcRange } from "@/server/domain/time";
 import { localDayKey } from "@/server/domain/time";
 import { dailyNoMissedStreak } from "@/server/domain/streaks";
+import {
+  consecutiveCompletedEventStreak,
+  overallDailyStreak,
+  weeklyComplianceStreak,
+} from "@/server/domain/streaks";
 
 export async function getClientReport(
   actor: Actor,
@@ -137,6 +142,102 @@ export async function getClientReport(
         .toSorted(([a], [b]) => b.localeCompare(a))
         .map(([, statuses]) => statuses),
     );
+    const workoutStreak = consecutiveCompletedEventStreak(
+      workouts
+        .map((event, index) => ({
+          at: event.scheduledAt,
+          status: workoutInputs[index]?.status ?? "SCHEDULED",
+        }))
+        .filter((event) => event.at <= now)
+        .toSorted((a, b) => b.at.getTime() - a.at.getTime())
+        .map((event) => event.status),
+    );
+    const mealStreak = consecutiveCompletedEventStreak(
+      meals
+        .map((event, index) => ({
+          at: event.scheduledAt,
+          status: mealInputs[index]?.status ?? "SCHEDULED",
+        }))
+        .filter((event) => event.at <= now)
+        .toSorted((a, b) => b.at.getTime() - a.at.getTime())
+        .map((event) => event.status),
+    );
+    const dailyCompliance = new Map<
+      string,
+      {
+        workouts: typeof workoutInputs;
+        meals: typeof mealInputs;
+        supplements: typeof supplementInputs;
+      }
+    >();
+    const dayBucket = (at: Date) => {
+      const key = localDayKey(at, profile.user.timezone);
+      const bucket = dailyCompliance.get(key) ?? {
+        workouts: [],
+        meals: [],
+        supplements: [],
+      };
+      dailyCompliance.set(key, bucket);
+      return bucket;
+    };
+    workouts.forEach((event, index) => {
+      const input = workoutInputs[index];
+      if (input && event.scheduledAt <= now)
+        dayBucket(event.scheduledAt).workouts.push(input);
+    });
+    meals.forEach((event, index) => {
+      const input = mealInputs[index];
+      if (input && event.scheduledAt <= now)
+        dayBucket(event.scheduledAt).meals.push(input);
+    });
+    supplements.forEach((event, index) => {
+      const input = supplementInputs[index];
+      if (input && event.scheduledAt <= now)
+        dayBucket(event.scheduledAt).supplements.push(input);
+    });
+    const dailyResults = [...dailyCompliance.entries()]
+      .toSorted(([a], [b]) => b.localeCompare(a))
+      .map(([, input]) => calculateCompliance(input));
+    const overallStreak = overallDailyStreak(dailyResults);
+    const weeks = new Map<
+      string,
+      {
+        workouts: typeof workoutInputs;
+        meals: typeof mealInputs;
+        supplements: typeof supplementInputs;
+      }
+    >();
+    const weekBucket = (at: Date) => {
+      const weekStart = mondayWeekUtcRange(at, profile.user.timezone).start;
+      const key = weekStart.toISOString();
+      const bucket = weeks.get(key) ?? {
+        workouts: [],
+        meals: [],
+        supplements: [],
+      };
+      weeks.set(key, bucket);
+      return bucket;
+    };
+    workouts.forEach((event, index) => {
+      const input = workoutInputs[index];
+      if (input && event.scheduledAt <= now)
+        weekBucket(event.scheduledAt).workouts.push(input);
+    });
+    meals.forEach((event, index) => {
+      const input = mealInputs[index];
+      if (input && event.scheduledAt <= now)
+        weekBucket(event.scheduledAt).meals.push(input);
+    });
+    supplements.forEach((event, index) => {
+      const input = supplementInputs[index];
+      if (input && event.scheduledAt <= now)
+        weekBucket(event.scheduledAt).supplements.push(input);
+    });
+    const weeklyStreak = weeklyComplianceStreak(
+      [...weeks.entries()]
+        .toSorted(([a], [b]) => b.localeCompare(a))
+        .map(([, input]) => calculateCompliance(input).overall),
+    );
     const weightTrend = calculateWeightTrend(
       bodyMetrics.map((metric) => ({
         id: metric.id,
@@ -170,6 +271,13 @@ export async function getClientReport(
         overall: asPercent(compliance.overall),
       },
       dailyStreak,
+      streaks: {
+        daily: dailyStreak,
+        weekly: weeklyStreak,
+        workout: workoutStreak,
+        meal: mealStreak,
+        overall: overallStreak,
+      },
       weightTrend,
     };
   });
@@ -198,7 +306,11 @@ export async function getCurrentWeekReport(
 export async function getCoachOverview(actor: Actor, now = new Date()) {
   const coachId = requireCoachProfileId(actor);
   const clients = await db.clientProfile.findMany({
-    where: { coachId, user: { deletedAt: null } },
+    where: {
+      coachId,
+      status: { in: ["ACTIVE", "INACTIVE", "INVITED"] },
+      user: { deletedAt: null },
+    },
     include: { user: true },
     orderBy: { user: { lastName: "asc" } },
   });

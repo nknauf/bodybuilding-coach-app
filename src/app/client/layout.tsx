@@ -11,7 +11,12 @@ export default async function ClientLayout({
   return (
     <AppShell
       role="Client"
-      navigation={[{ href: "/client", label: "My week" }]}
+      navigation={[
+        { href: "/client", label: "Today" },
+        { href: "/client#calendar", label: "Calendar" },
+        { href: "/client#progress", label: "Progress" },
+        { href: "/client#bodyweight", label: "Bodyweight" },
+      ]}
     >
       {children}
     </AppShell>

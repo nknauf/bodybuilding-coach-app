@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { UserButton } from "@clerk/nextjs";
 import type { ReactNode } from "react";
 import { Dumbbell } from "lucide-react";
@@ -12,6 +15,13 @@ export function AppShell({
   navigation: readonly { href: string; label: string }[];
   children: ReactNode;
 }) {
+  const pathname = usePathname();
+  const isActive = (href: string) => {
+    const path = href.split("#")[0] ?? href;
+    if (path === "/admin" || path === "/coach" || path === "/client")
+      return pathname === path;
+    return pathname === path || pathname.startsWith(`${path}/`);
+  };
   return (
     <div className="bg-muted/30 min-h-screen">
       <header className="bg-background/95 sticky top-0 z-30 border-b backdrop-blur">
@@ -27,7 +37,13 @@ export function AppShell({
               <Link
                 key={item.href}
                 href={item.href}
-                className="text-muted-foreground hover:bg-muted hover:text-foreground rounded-md px-3 py-2 text-sm"
+                className={`hover:bg-muted hover:text-foreground rounded-md px-3 py-2 text-sm ${
+                  isActive(item.href)
+                    ? "bg-muted text-foreground"
+                    : "text-muted-foreground"
+                }`}
+                aria-current={isActive(item.href) ? "page" : undefined}
+                data-active={isActive(item.href) || undefined}
               >
                 {item.label}
               </Link>
@@ -43,7 +59,13 @@ export function AppShell({
             <Link
               key={item.href}
               href={item.href}
-              className="text-muted-foreground hover:bg-muted rounded-md px-3 py-1.5 text-sm whitespace-nowrap"
+              className={`hover:bg-muted rounded-md px-3 py-1.5 text-sm whitespace-nowrap ${
+                isActive(item.href)
+                  ? "bg-muted text-foreground"
+                  : "text-muted-foreground"
+              }`}
+              aria-current={isActive(item.href) ? "page" : undefined}
+              data-active={isActive(item.href) || undefined}
             >
               {item.label}
             </Link>

@@ -24,10 +24,39 @@ export async function POST(request: NextRequest) {
     const email = primary.email_address.trim().toLowerCase();
 
     await db.$transaction(async (tx) => {
-      const existing = await tx.user.findFirst({
-        where: { OR: [{ clerkUserId: event.data.id }, { email }] },
-        include: { clientProfile: true },
-      });
+      const [byClerkId, byEmail] = await Promise.all([
+        tx.user.findUnique({
+          where: { clerkUserId: event.data.id },
+          include: { clientProfile: true },
+        }),
+        tx.user.findUnique({
+          where: { email },
+          include: { clientProfile: true },
+        }),
+      ]);
+      if (byClerkId && byEmail && byClerkId.id !== byEmail.id) {
+        await writeAudit(tx, {
+          action: "CLERK_USER_SYNC_REJECTED",
+          entityType: "USER",
+          entityId: byClerkId.id,
+          newValue: { reason: "identity_email_collision" },
+        });
+        return;
+      }
+      const existing = byClerkId ?? byEmail;
+      const metadataUserId =
+        typeof event.data.public_metadata?.applicationUserId === "string"
+          ? event.data.public_metadata.applicationUserId
+          : null;
+      if (metadataUserId && existing && metadataUserId !== existing.id) {
+        await writeAudit(tx, {
+          action: "CLERK_USER_SYNC_REJECTED",
+          entityType: "USER",
+          entityId: existing.id,
+          newValue: { reason: "invitation_metadata_mismatch" },
+        });
+        return;
+      }
       // Roles are provisioned by an admin/coach. A public Clerk signup never
       // creates an application role by itself.
       if (!existing) return;
@@ -51,8 +80,15 @@ export async function POST(request: NextRequest) {
           },
         });
         await tx.clientInvite.updateMany({
-          where: { email, status: "PENDING" },
-          data: { status: "ACCEPTED", acceptedAt: new Date() },
+          where: {
+            status: "PENDING",
+            OR: [{ clientUserId: existing.id }, { email }],
+          },
+          data: {
+            status: "ACCEPTED",
+            acceptedAt: new Date(),
+            deliveryError: null,
+          },
         });
       }
       await writeAudit(tx, {
