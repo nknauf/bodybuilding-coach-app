@@ -10,6 +10,11 @@ Tailwind CSS 4, shadcn/ui, Clerk, Prisma ORM 7 (the current generally available
 release, not Prisma Next), Neon PostgreSQL, Zod, date-fns/date-fns-tz, Recharts,
 Vitest, npm, and Vercel.
 
+In simple terms, this is a working private-demo MVP rather than a blank
+scaffold. The main admin, coach, and client workflows use real authentication
+and database records, and the production build succeeds. The remaining work is
+primarily deployment configuration and the product hardening listed below.
+
 ## What is implemented
 
 - Clerk sign-in/sign-up, Next 16 `proxy.ts`, and verified Clerk webhook sync.
@@ -108,32 +113,42 @@ unique constraints, checks, and indexes to reduce ownership mistakes.
 
    Future R2, Stream, PostHog, and Upstash variables may remain blank.
 
-3. Apply development migrations and seed:
+3. Generate Prisma Client and apply the checked-in migrations:
 
    ```bash
    npm run db:generate
-   npm run db:migrate -- --name local
-   npm run db:seed
-   ```
-
-   The checked-in initial migration can also be applied without creating a new
-   migration:
-
-   ```bash
    npm run db:migrate:deploy
    ```
 
-4. Start the app:
+   Use `npm run db:migrate -- --name DESCRIPTION` only while developing a new
+   schema change. Do not use `prisma db push` as the normal migration workflow.
+
+4. Choose one initial-user workflow:
+
+   - For a clean setup, bootstrap only the first administrator:
+
+   ```bash
+   npm run db:bootstrap-admin -- --email you@example.com --first-name Your --last-name Name --timezone America/New_York
+   ```
+
+   - For local sample data, run `npm run db:seed` instead. The demo seed is
+     idempotent but creates five sample users and associated coaching records.
+
+   Bootstrap is idempotent for an existing, non-deleted administrator. It
+   refuses to overwrite a coach/client account or revive a deleted user.
+
+5. Start the app:
 
    ```bash
    npm run dev
    ```
 
-5. Open `http://localhost:3000`.
+6. Open `http://localhost:3000`.
 
-Do not use `prisma db push` as the normal migration workflow.
+On Windows PowerShell systems where script execution blocks `npm.ps1`, use
+`npm.cmd` in place of `npm` without changing the machine execution policy.
 
-## Clerk setup and demo-user mapping
+## Clerk setup and user mapping
 
 Configure these Clerk paths:
 
@@ -150,8 +165,12 @@ https://YOUR_DOMAIN/api/webhooks/clerk
 Subscribe to `user.created`, `user.updated`, and `user.deleted`, then put its
 signing secret in `CLERK_WEBHOOK_SECRET`.
 
-The database seed cannot fabricate authenticated Clerk accounts. It provisions
-these application users with no `clerkUserId`:
+Neither bootstrap nor the database seed can fabricate authenticated Clerk
+accounts. Bootstrap provisions the supplied admin email with no `clerkUserId`.
+Sign up in Clerk with that exact email; the webhook attaches the Clerk ID and
+activates the account.
+
+The optional demo seed provisions these application users:
 
 | Role     | Email                       |
 | -------- | --------------------------- |
@@ -180,6 +199,7 @@ npm test
 npm run build
 npm run db:generate
 npm run db:migrate
+npm run db:bootstrap-admin -- --email you@example.com --first-name Your --last-name Name --timezone America/New_York
 npm run db:seed
 npm run db:studio
 ```
@@ -198,12 +218,21 @@ $env:RUN_DATABASE_TESTS="1"; npm test
 
 ## Vercel deployment
 
-1. Import the repository into Vercel.
-2. Add all required production environment variables from `.env.example`.
+The checked-in Vercel configuration intentionally has no Cron schedule so a
+basic deployment works on the Hobby plan. The protected reconciliation route
+remains available for a later daily Hobby schedule or hourly Pro schedule.
+
+1. Push the intended commit to a Git provider, import the repository from
+   Vercel's **New Project** screen, and keep the detected Next.js settings and
+   repository root.
+2. In Vercel **Settings > Environment Variables**, add all required values from
+   `.env.example` to Preview and Production.
    Never expose database, Clerk secret, cron, or service secrets with a
    `NEXT_PUBLIC_` prefix.
-3. Set `DATABASE_URL` to Neon’s pooled production URL and `DIRECT_URL` to the
-   direct production URL.
+3. Set `DATABASE_URL` to Neon's pooled production URL and `DIRECT_URL` to the
+   direct production URL. Add the Clerk keys and four Clerk path/redirect
+   values. Initially omit the deferred services, `CLERK_WEBHOOK_SECRET`, and
+   `CRON_SECRET`.
 4. Before promoting the application, apply reviewed migrations from a trusted
    CI/deployment job:
 
@@ -211,13 +240,27 @@ $env:RUN_DATABASE_TESTS="1"; npm test
    npm ci
    npm run db:generate
    npm run db:migrate:deploy
+   npm run db:bootstrap-admin -- --email you@example.com --first-name Your --last-name Name --timezone America/New_York
    ```
 
-5. Deploy the saved commit. `postinstall` generates Prisma Client and
-   `npm run build` builds Next.js.
-6. Configure the production Clerk webhook URL and secret.
-7. Set `CRON_SECRET`. Vercel Cron calls `/api/cron/events` hourly according to
-   `vercel.json`; the route requires `Authorization: Bearer $CRON_SECRET`.
+   Skip `db:seed` when you want only the bootstrapped administrator. Running
+   bootstrap against a database with demo data preserves the existing records.
+
+5. Deploy to obtain the stable `https://YOUR_PROJECT.vercel.app` URL. Add it as
+   `APP_URL` in Preview and Production, then redeploy.
+6. In Clerk, add
+   `https://YOUR_PROJECT.vercel.app/api/webhooks/clerk` as a webhook, subscribe
+   to `user.created`, `user.updated`, and `user.deleted`, and put its signing
+   secret in Vercel as `CLERK_WEBHOOK_SECRET`. Redeploy once more.
+7. Sign up with the exact bootstrapped email and confirm `/app` redirects to
+   `/admin`. Then smoke-test admin coach creation, coach client invitation,
+   client registration, scheduling, and client logging.
+8. Inspect Vercel build/function logs. With cron disabled, leave `CRON_SECRET`
+   unset and confirm `/api/cron/events` returns 404.
+
+To enable reconciliation later, set a random `CRON_SECRET` of at least 16
+characters and add a Vercel Cron entry for `/api/cron/events`. Hobby supports a
+once-daily schedule; an hourly schedule requires Vercel Pro.
 
 Never run `prisma migrate reset`, a destructive migration, or `db push` against
 production. Back up the database and review generated SQL before deploy.
