@@ -48,8 +48,8 @@ export function ClientDemo() {
           Everything below is safe to try. Your changes stay in this tab.
         </p>
       </header>
-      <div className="grid gap-6 lg:grid-cols-[1.4fr_.8fr]">
-        <section id="calendar">
+      <div className="flex flex-col gap-6">
+        <section id="calendar" className="order-2">
           <h2 className="mb-3 text-xl font-semibold">This week</h2>
           <div className="flex gap-2 overflow-x-auto pb-2 lg:grid lg:grid-cols-7">
             {Array.from({ length: 7 }, (_, i) => addDays(monday, i)).map(
@@ -80,7 +80,7 @@ export function ClientDemo() {
             )}
           </div>
         </section>
-        <section>
+        <section className="order-1">
           <h2 className="mb-3 text-xl font-semibold">Today&apos;s actions</h2>
           <div className="space-y-3">
             {todayWorkouts.map((workout) => (

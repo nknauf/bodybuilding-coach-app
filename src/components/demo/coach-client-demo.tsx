@@ -1,7 +1,14 @@
 "use client";
 
 import { addDays, format, startOfWeek } from "date-fns";
-import { CalendarPlus, Dumbbell, Plus, Salad, Sparkles } from "lucide-react";
+import {
+  CalendarPlus,
+  Dumbbell,
+  Plus,
+  Salad,
+  Sparkles,
+  Trash2,
+} from "lucide-react";
 import { useState } from "react";
 import { useDemo } from "@/demo/demo-provider";
 import type {
@@ -23,6 +30,14 @@ import {
 } from "@/components/ui/sheet";
 
 type Kind = "workout" | "meal" | "supplement";
+type DemoExerciseDraftState = {
+  key: string;
+  exerciseId: string;
+  count: number;
+  reps: number;
+  search: string;
+  creating: boolean;
+};
 
 export function CoachClientDemo({ clientId }: { clientId: string }) {
   const { state, dispatch } = useDemo();
@@ -235,6 +250,15 @@ export function CoachClientDemo({ clientId }: { clientId: string }) {
                   setDrawer(null);
                 }}
                 exercises={state.exercises}
+                onCreateExercise={(name) => {
+                  const exercise = {
+                    id: crypto.randomUUID(),
+                    name: name.trim(),
+                    scope: "COACH" as const,
+                  };
+                  dispatch({ type: "ADD_EXERCISE", exercise });
+                  return exercise;
+                }}
               />
             ) : drawer?.kind === "meal" ? (
               <MealForm
@@ -304,39 +328,53 @@ function WorkoutForm({
   date,
   clientId,
   exercises,
+  onCreateExercise,
   onSave,
 }: {
   date?: string;
   clientId: string;
   exercises: { id: string; name: string }[];
+  onCreateExercise: (name: string) => { id: string; name: string };
   onSave: (workout: DemoWorkout) => void;
 }) {
-  const [count, setCount] = useState(3);
-  const [reps, setReps] = useState(10);
+  const makeDraft = (): DemoExerciseDraftState => ({
+    key: crypto.randomUUID(),
+    exerciseId: exercises[0]?.id ?? "",
+    count: 3,
+    reps: 8,
+    search: "",
+    creating: false,
+  });
+  const [draftExercises, setDraftExercises] = useState([makeDraft()]);
+  const updateDraft = (key: string, update: Partial<DemoExerciseDraftState>) =>
+    setDraftExercises((current) =>
+      current.map((item) => (item.key === key ? { ...item, ...update } : item)),
+    );
   function submit(formData: FormData) {
-    const exerciseId = String(formData.get("exerciseId"));
-    const selected =
-      exercises.find((x) => x.id === exerciseId) ?? exercises[0]!;
     const workoutId = crypto.randomUUID();
-    const assigned: DemoWorkoutExercise = {
-      id: crypto.randomUUID(),
-      exerciseId: selected.id,
-      name: selected.name,
-      sets: Array.from({ length: count }, () => ({
+    const assigned: DemoWorkoutExercise[] = draftExercises.map((draft) => {
+      const selected =
+        exercises.find((item) => item.id === draft.exerciseId) ?? exercises[0]!;
+      return {
         id: crypto.randomUUID(),
-        targetRepsMin: reps,
-        targetRepsMax: reps,
-        unit: "LB" as const,
-      })),
-      previous: [],
-    };
+        exerciseId: selected.id,
+        name: selected.name,
+        sets: Array.from({ length: draft.count }, () => ({
+          id: crypto.randomUUID(),
+          targetRepsMin: draft.reps,
+          targetRepsMax: draft.reps,
+          unit: "LB" as const,
+        })),
+        previous: [],
+      };
+    });
     onSave({
       id: workoutId,
       clientId,
       name: String(formData.get("name")),
       scheduledAt: new Date(String(formData.get("scheduledAt"))).toISOString(),
       status: "SCHEDULED",
-      exercises: [assigned],
+      exercises: assigned,
     });
   }
   return (
@@ -355,19 +393,145 @@ function WorkoutForm({
           className="mt-1"
         />
       </label>
-      <label className="block text-sm font-medium">
-        Exercise
-        <select
-          name="exerciseId"
-          className="mt-1 h-10 w-full rounded-lg border px-3 text-sm"
+      <div className="space-y-3">
+        {draftExercises.map((draft, index) => (
+          <DemoExerciseDraft
+            key={draft.key}
+            draft={draft}
+            index={index}
+            exercises={exercises}
+            canRemove={draftExercises.length > 1}
+            update={(update) => updateDraft(draft.key, update)}
+            remove={() =>
+              setDraftExercises((current) =>
+                current.filter((item) => item.key !== draft.key),
+              )
+            }
+            createExercise={onCreateExercise}
+          />
+        ))}
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full"
+          onClick={() =>
+            setDraftExercises((current) => [...current, makeDraft()])
+          }
         >
-          {exercises.map((x) => (
-            <option key={x.id} value={x.id}>
-              {x.name}
-            </option>
-          ))}
-        </select>
-      </label>
+          <Plus /> Add exercise
+        </Button>
+      </div>
+      <Button className="w-full">Schedule workout</Button>
+    </form>
+  );
+}
+
+function DemoExerciseDraft({
+  draft,
+  index,
+  exercises,
+  canRemove,
+  update,
+  remove,
+  createExercise,
+}: {
+  draft: DemoExerciseDraftState;
+  index: number;
+  exercises: { id: string; name: string }[];
+  canRemove: boolean;
+  update: (update: Partial<DemoExerciseDraftState>) => void;
+  remove: () => void;
+  createExercise: (name: string) => { id: string; name: string };
+}) {
+  const normalizedSearch = draft.search.trim().toLowerCase();
+  const matches = exercises.filter((exercise) =>
+    exercise.name.toLowerCase().includes(normalizedSearch),
+  );
+  const hasExactMatch = exercises.some(
+    (exercise) => exercise.name.trim().toLowerCase() === normalizedSearch,
+  );
+  return (
+    <fieldset className="space-y-3 rounded-lg border p-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm font-medium">Exercise {index + 1}</span>
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          aria-label={`Remove exercise ${index + 1}`}
+          disabled={!canRemove}
+          onClick={remove}
+        >
+          <Trash2 />
+        </Button>
+      </div>
+      <Input
+        value={draft.search}
+        onChange={(event) => update({ search: event.target.value })}
+        placeholder="Search exercises"
+        aria-label={`Search exercise ${index + 1}`}
+      />
+      <select
+        aria-label={`Exercise ${index + 1}`}
+        className="h-10 w-full rounded-lg border px-3 text-sm"
+        value={draft.exerciseId}
+        onChange={(event) => update({ exerciseId: event.target.value })}
+      >
+        {matches.map((exercise) => (
+          <option key={exercise.id} value={exercise.id}>
+            {exercise.name}
+          </option>
+        ))}
+        {!matches.some((exercise) => exercise.id === draft.exerciseId)
+          ? exercises
+              .filter((exercise) => exercise.id === draft.exerciseId)
+              .map((exercise) => (
+                <option key={exercise.id} value={exercise.id}>
+                  {exercise.name}
+                </option>
+              ))
+          : null}
+      </select>
+      {normalizedSearch && !hasExactMatch ? (
+        draft.creating ? (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed p-2">
+            <span className="text-sm">
+              Create &quot;{draft.search.trim()}&quot;?
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => {
+                const created = createExercise(draft.search);
+                update({
+                  exerciseId: created.id,
+                  search: created.name,
+                  creating: false,
+                });
+              }}
+            >
+              Create and select
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => update({ creating: false })}
+            >
+              Cancel
+            </Button>
+          </div>
+        ) : (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={() => update({ creating: true })}
+          >
+            <Plus /> Create &quot;{draft.search.trim()}&quot;
+          </Button>
+        )
+      ) : null}
       <div>
         <span className="text-sm font-medium">Quick prescription</span>
         <div className="mt-2 flex flex-wrap gap-2">
@@ -377,18 +541,19 @@ function WorkoutForm({
             [3, 10],
             [4, 8],
             [4, 10],
-          ].map(([c, r]) => (
+          ].map(([count, reps]) => (
             <Button
-              key={`${c}-${r}`}
+              key={`${count}-${reps}`}
               type="button"
               size="xs"
-              variant={count === c && reps === r ? "default" : "outline"}
-              onClick={() => {
-                setCount(c!);
-                setReps(r!);
-              }}
+              variant={
+                draft.count === count && draft.reps === reps
+                  ? "default"
+                  : "outline"
+              }
+              onClick={() => update({ count: count!, reps: reps! })}
             >
-              {c}×{r}
+              {count}×{reps}
             </Button>
           ))}
         </div>
@@ -400,8 +565,8 @@ function WorkoutForm({
             type="number"
             min={1}
             max={10}
-            value={count}
-            onChange={(event) => setCount(Number(event.target.value))}
+            value={draft.count}
+            onChange={(event) => update({ count: Number(event.target.value) })}
             className="mt-1"
           />
         </label>
@@ -411,16 +576,16 @@ function WorkoutForm({
             type="number"
             min={1}
             max={100}
-            value={reps}
-            onChange={(event) => setReps(Number(event.target.value))}
+            value={draft.reps}
+            onChange={(event) => update({ reps: Number(event.target.value) })}
             className="mt-1"
           />
         </label>
       </div>
-      <Button className="w-full">Schedule workout</Button>
-    </form>
+    </fieldset>
   );
 }
+
 function MealForm({
   date,
   clientId,
