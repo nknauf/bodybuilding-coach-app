@@ -309,9 +309,14 @@ export async function scheduleWorkout(actor: Actor, rawInput: unknown) {
               orderIndex,
               coachNotes: item.notes,
               assignedSets: {
-                create: item.expectedReps.map((expectedReps, setIndex) => ({
+                create: item.sets.map((set, setIndex) => ({
                   orderIndex: setIndex,
-                  expectedReps,
+                  expectedReps: set.targetRepsMin,
+                  targetRepsMin: set.targetRepsMin,
+                  targetRepsMax: set.targetRepsMax,
+                  targetWeight: set.targetWeight,
+                  targetWeightUnit: set.targetWeightUnit,
+                  targetEffort: set.targetEffort,
                 })),
               },
             };

@@ -8,6 +8,7 @@ import {
 } from "@/server/services/reports";
 import { localDayKey, startOfLocalDayUtc } from "@/server/domain/time";
 import {
+  completeMealAction,
   completeMealWithActualsAction,
   completeSupplementAction,
   logBodyweightAction,
@@ -66,7 +67,7 @@ export default async function ClientPage({
       at: event.scheduledAt,
       status: event.effectiveStatus,
       href: `/client/workouts/${event.id}`,
-      action: null,
+      action: completeMealAction.bind(null, event.id),
       movedByClient: event.movedByClient,
     })),
     ...report.meals.map((event) => ({
@@ -112,12 +113,10 @@ export default async function ClientPage({
           <h1 className="text-3xl font-semibold tracking-tight">Today</h1>
         </div>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-3 sm:grid-cols-3">
         {[
           ["Daily", report.streaks.daily, "Applicable days without a miss"],
-          ["Weekly", report.streaks.weekly, "Weeks at 90% or better"],
           ["Workout", report.streaks.workout, "Completed workouts in a row"],
-          ["Meal", report.streaks.meal, "Completed meals in a row"],
           [
             "Overall",
             report.streaks.overall,
@@ -151,6 +150,7 @@ export default async function ClientPage({
                 key={`today-${event.kind}-${event.id}`}
                 event={event}
                 timezone={timezone}
+                prominent
               />
             ))}
           </div>
@@ -330,6 +330,7 @@ export default async function ClientPage({
 function EventCard({
   event,
   timezone,
+  prominent = false,
 }: {
   event: {
     id: string;
@@ -342,16 +343,23 @@ function EventCard({
     movedByClient: boolean;
   };
   timezone: string;
+  prominent?: boolean;
 }) {
   const colors = {
     workout: "border-blue-200 bg-blue-50",
     meal: "border-emerald-200 bg-emerald-50",
-    supplement: "border-red-200 bg-red-50",
+    supplement: "border-violet-200 bg-violet-50",
   };
   const content = (
     <>
-      <p className="line-clamp-2 text-xs font-medium">{event.name}</p>
-      <p className="text-muted-foreground mt-1 text-[11px]">
+      <p
+        className={`line-clamp-2 font-medium ${prominent ? "text-base" : "text-xs"}`}
+      >
+        {event.name}
+      </p>
+      <p
+        className={`text-muted-foreground mt-1 ${prominent ? "text-sm" : "text-[11px]"}`}
+      >
         {formatInTimeZone(event.at, timezone, "p")}
       </p>
       <div className="mt-2">
@@ -360,19 +368,34 @@ function EventCard({
     </>
   );
   return (
-    <div className={`rounded-lg border p-2 ${colors[event.kind]}`}>
+    <div
+      className={`rounded-lg border ${prominent ? "p-4" : "p-2"} ${colors[event.kind]}`}
+    >
       {event.href ? <Link href={event.href}>{content}</Link> : content}
+      {event.href && prominent && event.status !== "COMPLETED" ? (
+        <Button className="mt-3 w-full" render={<Link href={event.href} />}>
+          Start workout
+        </Button>
+      ) : null}
       {event.action && event.status !== "COMPLETED" ? (
         <form action={event.action} className="mt-2">
-          <Button size="xs" variant="outline" className="w-full bg-white">
-            Complete
+          <Button
+            size={prominent ? "default" : "xs"}
+            variant={prominent ? "default" : "outline"}
+            className="w-full"
+          >
+            {event.kind === "meal"
+              ? "Ate as planned"
+              : event.kind === "supplement"
+                ? "Complete"
+                : "Start workout"}
           </Button>
         </form>
       ) : null}
       {event.kind === "meal" && event.status !== "COMPLETED" ? (
         <details className="mt-2">
           <summary className="text-muted-foreground cursor-pointer text-[11px]">
-            Complete / actuals
+            Log something different
           </summary>
           <MutationForm
             action={completeMealWithActualsAction.bind(null, event.id)}

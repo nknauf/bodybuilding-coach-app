@@ -35,6 +35,55 @@ describe("prototype workflow validation", () => {
     ).toThrow();
   });
 
+  it("persists structured exact and ranged rep targets", () => {
+    const result = workoutSchema.parse({
+      clientId,
+      name: "Push A",
+      scheduledAt: "2026-08-06T09:00",
+      exercises: [
+        {
+          exerciseId: exerciseA,
+          sets: [
+            {
+              targetRepsMin: 8,
+              targetRepsMax: 8,
+              targetWeight: 225,
+              targetWeightUnit: "LB",
+              targetEffort: 8,
+            },
+            { targetRepsMin: 8, targetRepsMax: 10 },
+          ],
+        },
+      ],
+    });
+    expect(result.exercises[0]?.sets).toEqual([
+      {
+        targetRepsMin: 8,
+        targetRepsMax: 8,
+        targetWeight: 225,
+        targetWeightUnit: "LB",
+        targetEffort: 8,
+      },
+      { targetRepsMin: 8, targetRepsMax: 10 },
+    ]);
+  });
+
+  it("rejects an inverted rep range", () => {
+    expect(() =>
+      workoutSchema.parse({
+        clientId,
+        name: "Invalid range",
+        scheduledAt: "2026-08-06T09:00",
+        exercises: [
+          {
+            exerciseId: exerciseA,
+            sets: [{ targetRepsMin: 12, targetRepsMax: 8 }],
+          },
+        ],
+      }),
+    ).toThrow();
+  });
+
   it("keeps meal calories optional while accepting ordered ingredients", () => {
     const result = mealSchema.parse({
       clientId,

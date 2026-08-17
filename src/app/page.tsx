@@ -11,9 +11,7 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-[#f6f5f1]">
       <nav className="mx-auto flex max-w-6xl items-center justify-between px-5 py-5">
-        <span className="text-lg font-semibold tracking-tight">
-          Forge Coach
-        </span>
+        <span className="text-lg font-semibold tracking-tight">More Sore</span>
         <div className="flex gap-2">
           <Button variant="ghost" render={<Link href="/sign-in" />}>
             Sign in
@@ -123,7 +121,7 @@ export default function Home() {
           Keep the coaching signal honest.
         </h2>
         <p className="mx-auto mt-4 max-w-2xl text-zinc-600">
-          Forge Coach is an invitation-based workspace for an established
+          More Sore is an invitation-based workspace for an established
           coach-client relationship.
         </p>
         <Button className="mt-8" size="lg" render={<Link href="/sign-in" />}>
@@ -132,7 +130,7 @@ export default function Home() {
       </section>
       <footer className="border-t border-black/10">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-5 py-8 text-sm text-zinc-600">
-          <span className="font-medium text-zinc-900">Forge Coach</span>
+          <span className="font-medium text-zinc-900">More Sore</span>
           <span>Structured bodybuilding coaching, from plan to proof.</span>
         </div>
       </footer>

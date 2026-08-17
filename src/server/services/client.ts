@@ -289,7 +289,25 @@ export async function getClientWorkout(actor: Actor, rawWorkoutId: unknown) {
     },
   });
   if (!workout) throw new AuthorizationError();
-  return workout;
+  const previousLogs = await db.workoutSetLog.findMany({
+    where: {
+      clientId,
+      status: "COMPLETED",
+      workout: { scheduledAt: { lt: workout.scheduledAt } },
+      workoutExercise: {
+        exerciseId: { in: workout.exercises.map((item) => item.exerciseId) },
+      },
+    },
+    select: {
+      actualReps: true,
+      actualWeight: true,
+      weightUnit: true,
+      workoutExercise: { select: { exerciseId: true } },
+    },
+    orderBy: { loggedAt: "desc" },
+    take: 60,
+  });
+  return { ...workout, previousLogs };
 }
 
 export async function rescheduleEvent(actor: Actor, rawInput: unknown) {

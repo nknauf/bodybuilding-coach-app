@@ -15,7 +15,6 @@ export default async function ClientLayout({
         { href: "/client", label: "Today" },
         { href: "/client#calendar", label: "Calendar" },
         { href: "/client#progress", label: "Progress" },
-        { href: "/client#bodyweight", label: "Bodyweight" },
       ]}
     >
       {children}

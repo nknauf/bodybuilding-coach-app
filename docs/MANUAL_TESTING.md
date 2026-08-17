@@ -1,6 +1,6 @@
 # Three-account production testing
 
-This guide tests Forge Coach exactly as production users experience it. There is no role switching, impersonation, demo cookie, hidden seed, or reset control.
+This guide tests More Sore exactly as production users experience it. There is no role switching, impersonation, demo cookie, hidden seed, or reset control.
 
 ## 1. Prepare three real email identities
 

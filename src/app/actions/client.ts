@@ -37,6 +37,21 @@ export async function logSetAction(
   }
 }
 
+export async function fastLogSetAction(
+  workoutId: string,
+  assignedSetId: string,
+  formData: FormData,
+): Promise<void> {
+  const actor = await requireActor(["CLIENT"]);
+  await logAssignedSet(actor, {
+    workoutId,
+    assignedSetId,
+    ...Object.fromEntries(formData),
+  });
+  revalidatePath(`/client/workouts/${workoutId}`);
+  revalidatePath("/client");
+}
+
 export async function logExtraSetAction(
   workoutId: string,
   workoutExerciseId: string,

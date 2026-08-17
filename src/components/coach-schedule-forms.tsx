@@ -1,8 +1,13 @@
 "use client";
 
-import { startTransition, useActionState, type ReactNode } from "react";
+import {
+  startTransition,
+  useActionState,
+  useState,
+  type ReactNode,
+} from "react";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
-import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Copy, Plus, Search, Trash2 } from "lucide-react";
 import type { ActionState } from "@/app/actions/state";
 import { initialActionState } from "@/app/actions/state";
 import { Button } from "@/components/ui/button";
@@ -18,34 +23,46 @@ type ScheduleAction = (
 type WorkoutValues = {
   name: string;
   scheduledAt: string;
-  durationMinutes: string;
   notes: string;
   exercises: {
     exerciseId: string;
     notes: string;
-    expectedReps: { value: string }[];
+    sets: {
+      repsMin: string;
+      repsMax: string;
+      weight: string;
+      unit: "LB" | "KG";
+      effort: string;
+    }[];
   }[];
 };
 
 export function WorkoutBuilder({
   action,
   exercises,
+  defaultScheduledAt = "",
 }: {
   action: ScheduleAction;
   exercises: { id: string; name: string; scope: string }[];
+  defaultScheduledAt?: string;
 }) {
   const [state, dispatch, pending] = useActionState(action, initialActionState);
   const form = useForm<WorkoutValues>({
     defaultValues: {
       name: "",
-      scheduledAt: "",
-      durationMinutes: "",
+      scheduledAt: defaultScheduledAt,
       notes: "",
       exercises: [
         {
           exerciseId: exercises[0]?.id ?? "",
           notes: "",
-          expectedReps: [{ value: "8" }, { value: "8" }, { value: "8" }],
+          sets: Array.from({ length: 3 }, () => ({
+            repsMin: "8",
+            repsMax: "8",
+            weight: "",
+            unit: "LB" as const,
+            effort: "",
+          })),
         },
       ],
     },
@@ -58,12 +75,17 @@ export function WorkoutBuilder({
       "payload",
       JSON.stringify({
         ...values,
-        durationMinutes: values.durationMinutes || undefined,
         notes: values.notes || undefined,
         exercises: values.exercises.map((exercise) => ({
           exerciseId: exercise.exerciseId,
           notes: exercise.notes || undefined,
-          expectedReps: exercise.expectedReps.map((set) => Number(set.value)),
+          sets: exercise.sets.map((set) => ({
+            targetRepsMin: Number(set.repsMin),
+            targetRepsMax: Number(set.repsMax || set.repsMin),
+            targetWeight: set.weight === "" ? undefined : Number(set.weight),
+            targetWeightUnit: set.weight === "" ? undefined : set.unit,
+            targetEffort: set.effort === "" ? undefined : Number(set.effort),
+          })),
         })),
       }),
     );
@@ -75,20 +97,12 @@ export function WorkoutBuilder({
       <Field label="Workout name">
         <Input {...form.register("name")} required maxLength={120} />
       </Field>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3">
         <Field label="Client-local date and time">
           <Input
             type="datetime-local"
             {...form.register("scheduledAt")}
             required
-          />
-        </Field>
-        <Field label="Duration (minutes)">
-          <Input
-            type="number"
-            min={1}
-            max={1440}
-            {...form.register("durationMinutes")}
           />
         </Field>
       </div>
@@ -105,7 +119,15 @@ export function WorkoutBuilder({
               items.append({
                 exerciseId: exercises[0]?.id ?? "",
                 notes: "",
-                expectedReps: [{ value: "8" }],
+                sets: [
+                  {
+                    repsMin: "8",
+                    repsMax: "8",
+                    weight: "",
+                    unit: "LB",
+                    effort: "",
+                  },
+                ],
               })
             }
           >
@@ -155,21 +177,60 @@ function ExerciseEditor({
 }) {
   const sets = useFieldArray({
     control: form.control,
-    name: `exercises.${index}.expectedReps`,
+    name: `exercises.${index}.sets`,
   });
+  const [search, setSearch] = useState("");
+  const selectedId = useWatch({
+    control: form.control,
+    name: `exercises.${index}.exerciseId`,
+  });
+  const matches = exercises
+    .filter((exercise) =>
+      exercise.name.toLowerCase().includes(search.toLowerCase()),
+    )
+    .slice(0, 10);
+  const addPreset = (count: number, reps: number) =>
+    sets.replace(
+      Array.from({ length: count }, () => ({
+        repsMin: String(reps),
+        repsMax: String(reps),
+        weight: "",
+        unit: "LB" as const,
+        effort: "",
+      })),
+    );
   return (
     <fieldset className="space-y-3 rounded-xl border p-3">
       <div className="flex items-center gap-2">
+        <div className="relative min-w-0 flex-1">
+          <Search className="text-muted-foreground absolute top-2.5 left-3 size-4" />
+          <Input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search exercises"
+            className="pl-9"
+            aria-label={`Search exercise ${index + 1}`}
+          />
+        </div>
         <select
           aria-label={`Exercise ${index + 1}`}
-          className="bg-background h-10 min-w-0 flex-1 rounded-lg border px-3 text-sm"
+          className="bg-background h-10 min-w-36 rounded-lg border px-3 text-sm"
           {...form.register(`exercises.${index}.exerciseId`)}
         >
-          {exercises.map((exercise) => (
+          {matches.map((exercise) => (
             <option key={exercise.id} value={exercise.id}>
               {exercise.name} {exercise.scope === "COACH" ? "(custom)" : ""}
             </option>
           ))}
+          {!matches.some((item) => item.id === selectedId)
+            ? exercises
+                .filter((item) => item.id === selectedId)
+                .map((exercise) => (
+                  <option key={exercise.id} value={exercise.id}>
+                    {exercise.name}
+                  </option>
+                ))
+            : null}
         </select>
         <Button
           type="button"
@@ -209,18 +270,72 @@ function ExerciseEditor({
         {...form.register(`exercises.${index}.notes`)}
       />
       <div className="space-y-2">
+        <div className="flex flex-wrap gap-1.5" aria-label="Set presets">
+          {[
+            [2, 8],
+            [3, 8],
+            [3, 10],
+            [4, 8],
+            [4, 10],
+          ].map(([count, reps]) => (
+            <Button
+              key={`${count}-${reps}`}
+              type="button"
+              size="xs"
+              variant="outline"
+              onClick={() => addPreset(count!, reps!)}
+            >
+              {count}×{reps}
+            </Button>
+          ))}
+        </div>
+        <div className="text-muted-foreground hidden grid-cols-[2.5rem_1fr_1fr_1fr_1fr_2rem] gap-2 px-1 text-xs sm:grid">
+          <span>Set</span>
+          <span>Weight</span>
+          <span>Min reps</span>
+          <span>Max reps</span>
+          <span>RPE/RIR</span>
+          <span />
+        </div>
         {sets.fields.map((set, setIndex) => (
-          <div key={set.id} className="flex items-center gap-2">
-            <Label className="w-14">Set {setIndex + 1}</Label>
+          <div
+            key={set.id}
+            className="grid grid-cols-[2rem_1fr_1fr] items-center gap-2 sm:grid-cols-[2.5rem_1fr_1fr_1fr_1fr_2rem]"
+          >
+            <Label>{setIndex + 1}</Label>
             <Input
-              aria-label={`Expected reps for set ${setIndex + 1}`}
+              aria-label={`Target weight for set ${setIndex + 1}`}
+              inputMode="decimal"
+              type="number"
+              min={0}
+              step="0.5"
+              placeholder="BW"
+              {...form.register(`exercises.${index}.sets.${setIndex}.weight`)}
+            />
+            <Input
+              aria-label={`Minimum reps for set ${setIndex + 1}`}
               type="number"
               min={1}
               max={1000}
               required
-              {...form.register(
-                `exercises.${index}.expectedReps.${setIndex}.value`,
-              )}
+              {...form.register(`exercises.${index}.sets.${setIndex}.repsMin`)}
+            />
+            <Input
+              aria-label={`Maximum reps for set ${setIndex + 1}`}
+              type="number"
+              min={1}
+              max={1000}
+              required
+              {...form.register(`exercises.${index}.sets.${setIndex}.repsMax`)}
+            />
+            <Input
+              aria-label={`RPE or RIR for set ${setIndex + 1}`}
+              type="number"
+              min={0}
+              max={10}
+              step="0.5"
+              placeholder="—"
+              {...form.register(`exercises.${index}.sets.${setIndex}.effort`)}
             />
             <Button
               type="button"
@@ -229,19 +344,41 @@ function ExerciseEditor({
               aria-label="Remove assigned set"
               disabled={sets.fields.length === 1}
               onClick={() => sets.remove(setIndex)}
+              className="col-start-3 sm:col-auto"
             >
               <Trash2 />
             </Button>
           </div>
         ))}
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={() => sets.append({ value: "8" })}
-        >
-          <Plus /> Add set
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() =>
+              sets.append({
+                repsMin: "8",
+                repsMax: "8",
+                weight: "",
+                unit: "LB",
+                effort: "",
+              })
+            }
+          >
+            <Plus /> Add set
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              const previous = form.getValues(`exercises.${index}.sets`).at(-1);
+              if (previous) sets.append({ ...previous });
+            }}
+          >
+            <Copy /> Duplicate previous
+          </Button>
+        </div>
       </div>
     </fieldset>
   );
@@ -258,13 +395,19 @@ type MealValues = {
   ingredients: { name: string; amount: string }[];
 };
 
-export function MealBuilder({ action }: { action: ScheduleAction }) {
+export function MealBuilder({
+  action,
+  defaultScheduledAt = "",
+}: {
+  action: ScheduleAction;
+  defaultScheduledAt?: string;
+}) {
   const [state, dispatch, pending] = useActionState(action, initialActionState);
   const form = useForm<MealValues>({
     defaultValues: {
       name: "",
       description: "",
-      scheduledAt: "",
+      scheduledAt: defaultScheduledAt,
       expectedCalories: "",
       expectedProteinGrams: "",
       expectedCarbGrams: "",
