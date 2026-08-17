@@ -5,6 +5,11 @@ export interface ActionState {
   ok: boolean;
   message: string;
   inviteUrl?: string;
+  createdExercise?: {
+    id: string;
+    name: string;
+    scope: "COACH";
+  };
 }
 
 export const initialActionState: ActionState = { ok: false, message: "" };

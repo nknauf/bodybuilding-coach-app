@@ -40,6 +40,20 @@ describe("anonymous demo state", () => {
             },
           ],
         },
+        {
+          id: "second-assignment",
+          exerciseId: "row",
+          name: "Chest-Supported Row",
+          previous: [],
+          sets: [
+            {
+              id: "second-set",
+              targetRepsMin: 10,
+              targetRepsMax: 12,
+              unit: "LB" as const,
+            },
+          ],
+        },
       ],
     };
     const scheduled = demoReducer(initial, { type: "ADD_WORKOUT", workout });
@@ -55,6 +69,11 @@ describe("anonymous demo state", () => {
       logged.workouts.find((item) => item.id === workout.id)?.exercises[0]
         ?.sets[0],
     ).toMatchObject({ actualReps: 9, actualWeight: 140, status: "COMPLETED" });
+    expect(
+      logged.workouts
+        .find((item) => item.id === workout.id)
+        ?.exercises.map((exercise) => exercise.name),
+    ).toEqual(["Barbell Bench Press", "Chest-Supported Row"]);
   });
 
   it("completes meals and supplements without mutating the input state", () => {

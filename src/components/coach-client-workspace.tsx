@@ -1,14 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import {
-  CalendarPlus,
-  Dumbbell,
-  Plus,
-  Salad,
-  Search,
-  Sparkles,
-} from "lucide-react";
+import { CalendarPlus, Dumbbell, Plus, Salad, Sparkles } from "lucide-react";
 import type { ActionState } from "@/app/actions/state";
 import { WorkoutBuilder, MealBuilder } from "@/components/coach-schedule-forms";
 import { MutationForm } from "@/components/mutation-form";
@@ -211,10 +204,10 @@ export function CoachClientWorkspace({
               <div className="space-y-6">
                 <WorkoutBuilder
                   action={actions.workout}
+                  createExerciseAction={actions.exercise}
                   exercises={exercises}
                   defaultScheduledAt={defaultAt}
                 />
-                <InlineExercise action={actions.exercise} />
               </div>
             ) : drawer?.kind === "meal" ? (
               <MealBuilder
@@ -276,61 +269,5 @@ function Quick({
         <span className="text-muted-foreground text-xs">{detail}</span>
       </span>
     </button>
-  );
-}
-
-function InlineExercise({ action }: { action: Action }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="border-t pt-5">
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        onClick={() => setOpen(!open)}
-      >
-        <Search /> Can’t find an exercise? Create one
-      </Button>
-      {open ? (
-        <MutationForm
-          action={action}
-          submitLabel="Create exercise"
-          className="mt-3 grid gap-3 rounded-lg border p-3"
-        >
-          <Input name="name" placeholder="Exercise name" required />
-          <select
-            name="muscleGroup"
-            className="h-10 rounded-lg border px-3 text-sm"
-          >
-            {["CHEST", "BACK", "SHOULDERS", "LEGS", "ARMS", "CORE"].map((x) => (
-              <option key={x}>{x}</option>
-            ))}
-          </select>
-          <select
-            name="equipment"
-            className="h-10 rounded-lg border px-3 text-sm"
-          >
-            {[
-              "BARBELL",
-              "DUMBBELL",
-              "CABLE",
-              "BODYWEIGHT",
-              "PIN_LOADED_MACHINE",
-              "PLATE_LOADED_MACHINE",
-            ].map((x) => (
-              <option key={x}>{x}</option>
-            ))}
-          </select>
-          <select
-            name="category"
-            className="h-10 rounded-lg border px-3 text-sm"
-          >
-            {["COMPOUND", "ISOLATION", "CARDIO", "MOBILITY"].map((x) => (
-              <option key={x}>{x}</option>
-            ))}
-          </select>
-        </MutationForm>
-      ) : null}
-    </div>
   );
 }

@@ -75,9 +75,20 @@ export async function createExerciseAction(
 ): Promise<ActionState> {
   try {
     const actor = await requireActor(["COACH"]);
-    await createCoachExercise(actor, Object.fromEntries(formData));
+    const exercise = await createCoachExercise(
+      actor,
+      Object.fromEntries(formData),
+    );
     revalidatePath("/coach/exercises");
-    return { ok: true, message: "Exercise added to your catalog." };
+    return {
+      ok: true,
+      message: "Exercise added to your catalog.",
+      createdExercise: {
+        id: exercise.id,
+        name: exercise.name,
+        scope: "COACH",
+      },
+    };
   } catch (error) {
     return actionError(error);
   }

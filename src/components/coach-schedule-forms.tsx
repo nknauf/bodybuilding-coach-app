@@ -4,6 +4,7 @@ import {
   startTransition,
   useActionState,
   useState,
+  useTransition,
   type ReactNode,
 } from "react";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
@@ -19,6 +20,8 @@ type ScheduleAction = (
   state: ActionState,
   formData: FormData,
 ) => Promise<ActionState>;
+
+type ExerciseOption = { id: string; name: string; scope: string };
 
 type WorkoutValues = {
   name: string;
@@ -39,14 +42,17 @@ type WorkoutValues = {
 
 export function WorkoutBuilder({
   action,
+  createExerciseAction,
   exercises,
   defaultScheduledAt = "",
 }: {
   action: ScheduleAction;
-  exercises: { id: string; name: string; scope: string }[];
+  createExerciseAction: ScheduleAction;
+  exercises: ExerciseOption[];
   defaultScheduledAt?: string;
 }) {
   const [state, dispatch, pending] = useActionState(action, initialActionState);
+  const [exerciseCatalog, setExerciseCatalog] = useState(exercises);
   const form = useForm<WorkoutValues>({
     defaultValues: {
       name: "",
@@ -110,36 +116,23 @@ export function WorkoutBuilder({
         <Textarea {...form.register("notes")} maxLength={2000} />
       </Field>
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <Label>Exercises and assigned sets</Label>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() =>
-              items.append({
-                exerciseId: exercises[0]?.id ?? "",
-                notes: "",
-                sets: [
-                  {
-                    repsMin: "8",
-                    repsMax: "8",
-                    weight: "",
-                    unit: "LB",
-                    effort: "",
-                  },
-                ],
-              })
-            }
-          >
-            <Plus /> Add exercise
-          </Button>
-        </div>
+        <Label>Exercises and assigned sets</Label>
         {items.fields.map((item, index) => (
           <ExerciseEditor
             key={item.id}
             index={index}
             form={form}
-            exercises={exercises}
+            exercises={exerciseCatalog}
+            createExerciseAction={createExerciseAction}
+            onExerciseCreated={(exercise) =>
+              setExerciseCatalog((current) =>
+                current.some((item) => item.id === exercise.id)
+                  ? current
+                  : [...current, exercise].sort((a, b) =>
+                      a.name.localeCompare(b.name),
+                    ),
+              )
+            }
             canRemove={items.fields.length > 1}
             onRemove={() => items.remove(index)}
             onUp={() => items.swap(index, index - 1)}
@@ -148,6 +141,26 @@ export function WorkoutBuilder({
             last={index === items.fields.length - 1}
           />
         ))}
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full"
+          onClick={() =>
+            items.append({
+              exerciseId: exerciseCatalog[0]?.id ?? "",
+              notes: "",
+              sets: Array.from({ length: 3 }, () => ({
+                repsMin: "8",
+                repsMax: "8",
+                weight: "",
+                unit: "LB" as const,
+                effort: "",
+              })),
+            })
+          }
+        >
+          <Plus /> Add exercise
+        </Button>
       </div>
       <ActionFooter pending={pending} state={state} label="Schedule workout" />
     </form>
@@ -158,6 +171,8 @@ function ExerciseEditor({
   index,
   form,
   exercises,
+  createExerciseAction,
+  onExerciseCreated,
   canRemove,
   onRemove,
   onUp,
@@ -167,7 +182,9 @@ function ExerciseEditor({
 }: {
   index: number;
   form: ReturnType<typeof useForm<WorkoutValues>>;
-  exercises: { id: string; name: string; scope: string }[];
+  exercises: ExerciseOption[];
+  createExerciseAction: ScheduleAction;
+  onExerciseCreated: (exercise: ExerciseOption) => void;
   canRemove: boolean;
   onRemove: () => void;
   onUp: () => void;
@@ -180,6 +197,12 @@ function ExerciseEditor({
     name: `exercises.${index}.sets`,
   });
   const [search, setSearch] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [muscleGroup, setMuscleGroup] = useState("CHEST");
+  const [equipment, setEquipment] = useState("BARBELL");
+  const [category, setCategory] = useState("COMPOUND");
+  const [createMessage, setCreateMessage] = useState("");
+  const [createPending, startCreateTransition] = useTransition();
   const selectedId = useWatch({
     control: form.control,
     name: `exercises.${index}.exerciseId`,
@@ -189,6 +212,32 @@ function ExerciseEditor({
       exercise.name.toLowerCase().includes(search.toLowerCase()),
     )
     .slice(0, 10);
+  const normalizedSearch = search.trim().toLowerCase();
+  const hasExactMatch = exercises.some(
+    (exercise) => exercise.name.trim().toLowerCase() === normalizedSearch,
+  );
+  const createExercise = () => {
+    if (!search.trim()) return;
+    const data = new FormData();
+    data.set("name", search.trim());
+    data.set("muscleGroup", muscleGroup);
+    data.set("equipment", equipment);
+    data.set("category", category);
+    setCreateMessage("");
+    startCreateTransition(async () => {
+      const result = await createExerciseAction(initialActionState, data);
+      setCreateMessage(result.message);
+      if (!result.createdExercise) return;
+      onExerciseCreated(result.createdExercise);
+      form.setValue(
+        `exercises.${index}.exerciseId`,
+        result.createdExercise.id,
+        { shouldDirty: true },
+      );
+      setSearch(result.createdExercise.name);
+      setCreating(false);
+    });
+  };
   const addPreset = (count: number, reps: number) =>
     sets.replace(
       Array.from({ length: count }, () => ({
@@ -263,6 +312,93 @@ function ExerciseEditor({
           <Trash2 />
         </Button>
       </div>
+      {normalizedSearch && !hasExactMatch ? (
+        <div className="rounded-lg border border-dashed p-3">
+          {!creating ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => setCreating(true)}
+            >
+              <Plus /> Create &quot;{search.trim()}&quot;
+            </Button>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm font-medium">
+                Create &quot;{search.trim()}&quot;
+              </p>
+              <div className="grid gap-2 sm:grid-cols-3">
+                <select
+                  aria-label="Muscle group"
+                  className="bg-background h-10 rounded-lg border px-3 text-sm"
+                  value={muscleGroup}
+                  onChange={(event) => setMuscleGroup(event.target.value)}
+                >
+                  {["CHEST", "BACK", "SHOULDERS", "LEGS", "ARMS", "CORE"].map(
+                    (value) => (
+                      <option key={value}>{value}</option>
+                    ),
+                  )}
+                </select>
+                <select
+                  aria-label="Equipment"
+                  className="bg-background h-10 rounded-lg border px-3 text-sm"
+                  value={equipment}
+                  onChange={(event) => setEquipment(event.target.value)}
+                >
+                  {[
+                    "BARBELL",
+                    "DUMBBELL",
+                    "CABLE",
+                    "BODYWEIGHT",
+                    "PIN_LOADED_MACHINE",
+                    "PLATE_LOADED_MACHINE",
+                  ].map((value) => (
+                    <option key={value}>{value}</option>
+                  ))}
+                </select>
+                <select
+                  aria-label="Exercise category"
+                  className="bg-background h-10 rounded-lg border px-3 text-sm"
+                  value={category}
+                  onChange={(event) => setCategory(event.target.value)}
+                >
+                  {["COMPOUND", "ISOLATION", "CARDIO", "MOBILITY"].map(
+                    (value) => (
+                      <option key={value}>{value}</option>
+                    ),
+                  )}
+                </select>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={createPending}
+                  onClick={createExercise}
+                >
+                  {createPending ? "Creating..." : "Create and select"}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={createPending}
+                  onClick={() => setCreating(false)}
+                >
+                  Cancel
+                </Button>
+                {createMessage ? (
+                  <span className="text-muted-foreground text-sm" role="status">
+                    {createMessage}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          )}
+        </div>
+      ) : null}
       <Input
         placeholder="Exercise notes (optional)"
         aria-label={`Notes for exercise ${index + 1}`}
