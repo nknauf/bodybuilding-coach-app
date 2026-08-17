@@ -61,11 +61,51 @@ export const workoutSchema = scheduledBase.extend({
       z.object({
         exerciseId: uuidSchema,
         notes: z.string().trim().max(1000).optional(),
-        expectedReps: z.array(z.number().int().min(1).max(1000)).min(1).max(20),
+        expectedReps: z
+          .array(z.number().int().min(1).max(1000))
+          .min(1)
+          .max(20)
+          .optional(),
+        sets: z
+          .array(
+            z
+              .object({
+                targetRepsMin: z.number().int().min(1).max(1000),
+                targetRepsMax: z.number().int().min(1).max(1000),
+                targetWeight: z.number().min(0).max(10000).optional(),
+                targetWeightUnit: z.enum(["LB", "KG"]).optional(),
+                targetEffort: z.number().min(0).max(10).optional(),
+              })
+              .refine((set) => set.targetRepsMax >= set.targetRepsMin, {
+                message: "Maximum reps must be at least minimum reps",
+              }),
+          )
+          .min(1)
+          .max(20)
+          .optional(),
       }),
     )
     .min(1)
-    .max(30),
+    .max(30)
+    .transform((exercises, context) =>
+      exercises.map((exercise) => {
+        const sets =
+          exercise.sets ??
+          exercise.expectedReps?.map((reps) => ({
+            targetRepsMin: reps,
+            targetRepsMax: reps,
+            targetWeight: undefined,
+            targetWeightUnit: undefined,
+            targetEffort: undefined,
+          }));
+        if (!sets?.length)
+          context.addIssue({
+            code: "custom",
+            message: "Add at least one assigned set",
+          });
+        return { ...exercise, sets: sets ?? [] };
+      }),
+    ),
 });
 
 export const mealSchema = scheduledBase.extend({

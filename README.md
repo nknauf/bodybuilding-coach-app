@@ -1,6 +1,6 @@
-# Forge Coach
+# More Sore
 
-Forge Coach is a production-minded MVP for multi-tenant bodybuilding coaching.
+More Sore is a production-minded MVP for multi-tenant bodybuilding coaching.
 Its vertical slice covers administrator coach provisioning, coach-owned clients,
 dated workout/meal/supplement assignments, client logging, deterministic event
 states, weighted compliance, bodyweight trends, and mutation audit records.

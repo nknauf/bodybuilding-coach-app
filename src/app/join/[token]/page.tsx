@@ -29,7 +29,7 @@ export default async function JoinPage({
     <main className="grid min-h-screen place-items-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>Join Forge Coach</CardTitle>
+          <CardTitle>Join More Sore</CardTitle>
           <p className="text-muted-foreground text-sm">
             Hi {invite.firstName}. Your coach invited {maskedEmail}.
           </p>

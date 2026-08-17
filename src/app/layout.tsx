@@ -4,8 +4,8 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "Forge Coach",
-    template: "%s · Forge Coach",
+    default: "More Sore",
+    template: "%s · More Sore",
   },
   description: "Bodybuilding coaching schedules and trustworthy compliance.",
 };

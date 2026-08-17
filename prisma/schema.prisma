@@ -264,6 +264,11 @@ model AssignedSet {
   workoutExerciseId String          @db.Uuid
   orderIndex        Int
   expectedReps      Int
+  targetRepsMin     Int?
+  targetRepsMax     Int?
+  targetWeight      Decimal?        @db.Decimal(8, 2)
+  targetWeightUnit  WeightUnit?
+  targetEffort      Decimal?        @db.Decimal(3, 1)
   workoutExercise   WorkoutExercise @relation(fields: [workoutExerciseId], references: [id], onDelete: Cascade)
   log               WorkoutSetLog?
 

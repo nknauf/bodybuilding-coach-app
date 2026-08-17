@@ -30,7 +30,7 @@ export function AppShell({
             <span className="bg-primary text-primary-foreground grid size-9 place-items-center rounded-lg">
               <Dumbbell className="size-5" />
             </span>
-            <span>Forge Coach</span>
+            <span>More Sore</span>
           </Link>
           <nav className="hidden flex-1 items-center gap-1 md:flex">
             {navigation.map((item) => (
