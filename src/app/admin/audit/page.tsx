@@ -15,7 +15,7 @@ export default async function AuditPage() {
         <CardTitle>Audit log</CardTitle>
         <p className="text-muted-foreground text-sm">
           Latest 100 important mutations. Admin reads are explicit but not user
-          impersonation.
+          role switching. Every entry reflects the genuine authenticated actor.
         </p>
       </CardHeader>
       <CardContent className="space-y-2">
@@ -33,7 +33,7 @@ export default async function AuditPage() {
                 {log.entityType} · {log.entityId}
               </p>
             </div>
-            <span className="text-muted-foreground text-sm">
+            <span className="text-muted-foreground text-right text-sm">
               {log.actor
                 ? `${log.actor.firstName} ${log.actor.lastName}`
                 : "System"}

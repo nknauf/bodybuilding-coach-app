@@ -17,6 +17,7 @@
     "db:migrate": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:bootstrap-admin": "tsx prisma/bootstrap-admin.ts",
+    "db:link-clerk-user": "tsx prisma/link-clerk-user.ts",
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio"
   },

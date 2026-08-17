@@ -6,11 +6,16 @@ import { assertRole } from "@/server/auth/authorization";
 import { AuthorizationError } from "@/server/auth/errors";
 import { writeAudit } from "@/server/audit/write-audit";
 import { createCoachSchema, uuidSchema } from "@/server/validation/schemas";
+import { assertEmailAvailableForRole } from "@/server/auth/provisioning";
 
 export async function createCoach(actor: Actor, rawInput: unknown) {
   assertRole(actor, ["ADMIN"]);
   const input = createCoachSchema.parse(rawInput);
   return db.$transaction(async (tx) => {
+    const existing = await tx.user.findUnique({
+      where: { email: input.email },
+    });
+    assertEmailAvailableForRole(existing, "COACH");
     const user = await tx.user.create({
       data: {
         email: input.email,

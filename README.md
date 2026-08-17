@@ -108,7 +108,8 @@ unique constraints, checks, and indexes to reduce ownership mistakes.
      `-pooler`).
    - `DIRECT_URL`: Neon direct URL for Prisma Migrate.
    - Clerk publishable and secret keys.
-   - `CLERK_WEBHOOK_SECRET` when testing webhook sync.
+   - `CLERK_WEBHOOK_SIGNING_SECRET` when testing webhook sync. The legacy
+     `CLERK_WEBHOOK_SECRET` name remains supported.
    - a random `CRON_SECRET` of at least 16 characters to test reconciliation.
 
    Future R2, Stream, PostHog, and Upstash variables may remain blank.
@@ -163,12 +164,14 @@ https://YOUR_DOMAIN/api/webhooks/clerk
 ```
 
 Subscribe to `user.created`, `user.updated`, and `user.deleted`, then put its
-signing secret in `CLERK_WEBHOOK_SECRET`.
+signing secret in `CLERK_WEBHOOK_SIGNING_SECRET`.
 
 Neither bootstrap nor the database seed can fabricate authenticated Clerk
 accounts. Bootstrap provisions the supplied admin email with no `clerkUserId`.
-Sign up in Clerk with that exact email; the webhook attaches the Clerk ID and
-activates the account.
+Sign up in Clerk with that exact email. The webhook normally attaches the Clerk
+ID and activates the account. If delivery is delayed or missed, the first
+authenticated workspace request performs the same safe match against the
+verified primary email. Neither path creates roles for arbitrary public users.
 
 The optional demo seed provisions these application users:
 
@@ -200,6 +203,7 @@ npm run build
 npm run db:generate
 npm run db:migrate
 npm run db:bootstrap-admin -- --email you@example.com --first-name Your --last-name Name --timezone America/New_York
+npm run db:link-clerk-user -- --email you@example.com --clerk-user-id user_123
 npm run db:seed
 npm run db:studio
 ```
@@ -231,8 +235,8 @@ remains available for a later daily Hobby schedule or hourly Pro schedule.
    `NEXT_PUBLIC_` prefix.
 3. Set `DATABASE_URL` to Neon's pooled production URL and `DIRECT_URL` to the
    direct production URL. Add the Clerk keys and four Clerk path/redirect
-   values. Initially omit the deferred services, `CLERK_WEBHOOK_SECRET`, and
-   `CRON_SECRET`.
+   values. Initially omit the deferred services,
+   `CLERK_WEBHOOK_SIGNING_SECRET`, and `CRON_SECRET`.
 4. Before promoting the application, apply reviewed migrations from a trusted
    CI/deployment job:
 
@@ -251,12 +255,25 @@ remains available for a later daily Hobby schedule or hourly Pro schedule.
 6. In Clerk, add
    `https://YOUR_PROJECT.vercel.app/api/webhooks/clerk` as a webhook, subscribe
    to `user.created`, `user.updated`, and `user.deleted`, and put its signing
-   secret in Vercel as `CLERK_WEBHOOK_SECRET`. Redeploy once more.
+   secret in Vercel as `CLERK_WEBHOOK_SIGNING_SECRET`. Redeploy once more. An
+   unsigned POST should then return `400`; `503` means the secret is not loaded
+   in that deployment.
 7. Sign up with the exact bootstrapped email and confirm `/app` redirects to
    `/admin`. Then smoke-test admin coach creation, coach client invitation,
    client registration, scheduling, and client logging.
 8. Inspect Vercel build/function logs. With cron disabled, leave `CRON_SECRET`
    unset and confirm `/api/cron/events` returns 404.
+
+If a real Clerk event cannot be replayed and session recovery is unavailable,
+an operator can safely attach an already-verified identity to an already
+provisioned email:
+
+```bash
+npm run db:link-clerk-user -- --email you@example.com --clerk-user-id user_123
+```
+
+The command refuses unknown emails and identity collisions; it cannot create a
+role.
 
 To enable reconciliation later, set a random `CRON_SECRET` of at least 16
 characters and add a Vercel Cron entry for `/api/cron/events`. Hobby supports a
@@ -283,3 +300,17 @@ production. Back up the database and review generated SQL before deploy.
   are deferred. Their environment variables are inert.
 - The application is pinned to patched stable Next.js 16.3.0. The production
   dependency audit is expected to remain clear; rerun it during deployment.
+
+## Three-account production testing
+
+Test with three genuine Clerk identities and three ordinary application users:
+
+```text
+ADMIN_TEST_EMAIL=noahknauf@icloud.com
+COACH_TEST_EMAIL=YOUR_COACH_ALIAS_OR_EMAIL
+CLIENT_TEST_EMAIL=YOUR_CLIENT_ALIAS_OR_EMAIL
+```
+
+These are documentation placeholders, not environment variables. Provision the coach through the administrator interface, sign up with that exact verified email, invite the client through the coach interface, and accept using the exact client email. Use three separate browser profiles so Clerk cookies do not replace another role's session.
+
+No role switch, impersonation session, production reset button, or hidden test seed is used. See [docs/MANUAL_TESTING.md](docs/MANUAL_TESTING.md) for email preparation, the complete workflow, failure diagnostics, security checks, and the desktop/mobile screenshot checklist.

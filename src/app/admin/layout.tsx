@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { requireActor } from "@/server/auth/current-user";
+import { requirePageActor } from "@/server/auth/current-user";
 import { AppShell } from "@/components/app-shell";
 
 export default async function AdminLayout({
@@ -7,7 +7,7 @@ export default async function AdminLayout({
 }: {
   children: ReactNode;
 }) {
-  await requireActor(["ADMIN"]);
+  await requirePageActor(["ADMIN"]);
   return (
     <AppShell
       role="Admin"

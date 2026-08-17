@@ -12,6 +12,7 @@ import { writeAudit } from "@/server/audit/write-audit";
 import { localDateTimeToUtc } from "@/server/domain/time";
 import { getServerEnv } from "@/lib/env";
 import { userStatusForClientStatus } from "@/server/domain/client-lifecycle";
+import { assertEmailAvailableForRole } from "@/server/auth/provisioning";
 import {
   createClientSchema,
   exerciseSchema,
@@ -42,6 +43,10 @@ export async function provisionClient(actor: Actor, rawInput: unknown) {
   const tokenHash = createHash("sha256").update(token).digest("hex");
 
   const result = await db.$transaction(async (tx) => {
+    const existing = await tx.user.findUnique({
+      where: { email: input.email },
+    });
+    assertEmailAvailableForRole(existing, "CLIENT");
     const user = await tx.user.create({
       data: {
         email: input.email,
