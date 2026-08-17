@@ -19,8 +19,13 @@ export default function GlobalError({
         <div>
           <h1 className="text-3xl font-semibold">Something went wrong</h1>
           <p className="text-muted-foreground mt-2">
-            No changes were reported as complete. Try the request again.
+            We couldn&apos;t load your workspace. Try the request again.
           </p>
+          {error.digest ? (
+            <p className="mt-2 font-mono text-xs text-zinc-500">
+              Support code: {error.digest}
+            </p>
+          ) : null}
           <Button className="mt-6" onClick={() => unstable_retry()}>
             Try again
           </Button>

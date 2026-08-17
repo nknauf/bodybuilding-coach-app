@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { requireActor } from "@/server/auth/current-user";
+import { requirePageActor } from "@/server/auth/current-user";
 import { AppShell } from "@/components/app-shell";
 
 export default async function CoachLayout({
@@ -7,7 +7,7 @@ export default async function CoachLayout({
 }: {
   children: ReactNode;
 }) {
-  await requireActor(["COACH"]);
+  await requirePageActor(["COACH"]);
   return (
     <AppShell
       role="Coach"

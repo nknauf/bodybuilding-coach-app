@@ -14,6 +14,7 @@ const serverSchema = z.object({
   DATABASE_URL: z.string().min(1),
   DIRECT_URL: z.string().min(1).optional(),
   CLERK_SECRET_KEY: optionalSecret(),
+  CLERK_WEBHOOK_SIGNING_SECRET: optionalSecret(),
   CLERK_WEBHOOK_SECRET: optionalSecret(),
   APP_URL: optionalUrl,
   CRON_SECRET: optionalSecret(16),

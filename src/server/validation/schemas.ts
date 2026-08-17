@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { normalizedEmailSchema } from "./email";
 
 const boundedText = (max: number) => z.string().trim().min(1).max(max);
 const optionalNumber = (schema: z.ZodType<number, unknown>) =>
@@ -22,7 +23,7 @@ export const timezoneSchema = z
   }, "Invalid IANA timezone");
 
 export const createCoachSchema = z.object({
-  email: z.email().transform((value) => value.trim().toLowerCase()),
+  email: normalizedEmailSchema,
   firstName: boundedText(80),
   lastName: boundedText(80),
   timezone: timezoneSchema,
