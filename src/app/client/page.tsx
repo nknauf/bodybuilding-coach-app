@@ -67,7 +67,7 @@ export default async function ClientPage({
       at: event.scheduledAt,
       status: event.effectiveStatus,
       href: `/client/workouts/${event.id}`,
-      action: completeMealAction.bind(null, event.id),
+      action: null,
       movedByClient: event.movedByClient,
     })),
     ...report.meals.map((event) => ({
@@ -77,7 +77,7 @@ export default async function ClientPage({
       at: event.scheduledAt,
       status: event.effectiveStatus,
       href: null,
-      action: null,
+      action: completeMealAction.bind(null, event.id),
       movedByClient: event.movedByClient,
     })),
     ...report.supplements.map((event) => ({

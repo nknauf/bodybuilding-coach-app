@@ -32,15 +32,15 @@ export default function Home() {
             and coach from compliance you can trust.
           </p>
           <div className="mt-9 flex flex-wrap gap-3">
-            <Button size="lg" render={<Link href="/sign-in" />}>
-              Open your workspace <ArrowRight />
+            <Button size="lg" render={<Link href="/demo" />}>
+              Try the live demo <ArrowRight />
             </Button>
             <Button
               size="lg"
               variant="outline"
-              render={<Link href="/sign-up" />}
+              render={<Link href="/sign-in" />}
             >
-              Join an invitation
+              Sign in
             </Button>
           </div>
         </div>
