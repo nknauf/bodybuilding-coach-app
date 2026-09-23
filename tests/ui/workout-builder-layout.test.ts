@@ -22,9 +22,30 @@ describe("workout creation and client home regressions", () => {
     expect(workspace).toContain("h-[min(90vh,900px)]");
     expect(workspace).toContain("sm:max-w-[1050px]");
     expect(workspace).toContain("disablePointerDismissal");
-    expect(workspace).toContain("Discard this unsaved workout?");
+    expect(workspace).toContain("Discard this unsaved ${creationKind}?");
     expect(action).toContain("createdExercise: {");
     expect(action).toContain("revalidatePath(`/coach/clients/${clientId}`)");
+  });
+
+  it("opens meal and supplement creation in the centered workspace", () => {
+    const workspace = source("src/components/coach-client-workspace.tsx");
+    const builders = source("src/components/coach-schedule-forms.tsx");
+    const mutationForm = source("src/components/mutation-form.tsx");
+
+    expect(workspace).toContain('onClick={() => openCreate("meal")}');
+    expect(workspace).toContain('onClick={() => openCreate("supplement")}');
+    expect(workspace).toContain('creationKind === "meal"');
+    expect(workspace).toContain('creationKind === "supplement"');
+    expect(workspace).toContain("sm:max-w-[850px]");
+    expect(workspace).toContain("sm:max-w-[560px]");
+    expect(workspace).toContain("onCreated={creationSaved}");
+    expect(workspace).toContain("onSuccess={onCreated}");
+    expect(workspace).toContain('name="dosageText"');
+    expect(workspace).toContain('name="scheduledAt"');
+    expect(builders).toContain("onDirtyChange?.(isDirty)");
+    expect(mutationForm).toContain(
+      "onChangeCapture={() => onDirtyChange?.(true)}",
+    );
   });
 
   it("stacks demo Today actions above the weekly calendar at every breakpoint", () => {

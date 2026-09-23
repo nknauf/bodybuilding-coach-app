@@ -690,9 +690,13 @@ type MealValues = {
 export function MealBuilder({
   action,
   defaultScheduledAt = "",
+  onDirtyChange,
+  onCreated,
 }: {
   action: ScheduleAction;
   defaultScheduledAt?: string;
+  onDirtyChange?: (dirty: boolean) => void;
+  onCreated?: () => void;
 }) {
   const [state, dispatch, pending] = useActionState(action, initialActionState);
   const form = useForm<MealValues>({
@@ -711,6 +715,11 @@ export function MealBuilder({
     control: form.control,
     name: "ingredients",
   });
+  const { isDirty } = form.formState;
+  useEffect(() => onDirtyChange?.(isDirty), [isDirty, onDirtyChange]);
+  useEffect(() => {
+    if (state.ok) onCreated?.();
+  }, [state.ok, onCreated]);
   const macros = useWatch({
     control: form.control,
     name: ["expectedProteinGrams", "expectedCarbGrams", "expectedFatGrams"],

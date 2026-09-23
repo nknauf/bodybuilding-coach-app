@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, type ReactNode } from "react";
+import { useActionState, useEffect, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 import type { ActionState } from "@/app/actions/state";
 import { initialActionState } from "@/app/actions/state";
@@ -21,18 +21,26 @@ export function MutationForm({
   children,
   className,
   confirmMessage,
+  onDirtyChange,
+  onSuccess,
 }: {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>;
   submitLabel: string;
   children: ReactNode;
   className?: string;
   confirmMessage?: string;
+  onDirtyChange?: (dirty: boolean) => void;
+  onSuccess?: () => void;
 }) {
   const [state, dispatch] = useActionState(action, initialActionState);
+  useEffect(() => {
+    if (state.ok) onSuccess?.();
+  }, [state.ok, onSuccess]);
   return (
     <form
       action={dispatch}
       className={className}
+      onChangeCapture={() => onDirtyChange?.(true)}
       onSubmit={(event) => {
         if (confirmMessage && !window.confirm(confirmMessage))
           event.preventDefault();

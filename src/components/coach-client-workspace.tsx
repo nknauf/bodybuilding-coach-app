@@ -8,6 +8,7 @@ import { MutationForm } from "@/components/mutation-form";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogClose,
@@ -61,24 +62,32 @@ export function CoachClientWorkspace({
     date?: string;
   } | null>(null);
   const [editing, setEditing] = useState(false);
-  const [workoutDirty, setWorkoutDirty] = useState(false);
+  const [creationDirty, setCreationDirty] = useState(false);
   const openCreate = (kind: Kind, date?: string) => {
+    setCreationDirty(false);
     setEditing(true);
     setDrawer({ kind, date });
   };
   const defaultAt = drawer?.date ? `${drawer.date}T12:00` : "";
-  const workoutOpen = drawer?.kind === "workout" && editing;
-  const closeWorkout = useCallback(() => {
-    if (workoutDirty && !window.confirm("Discard this unsaved workout?"))
+  const creationKind =
+    editing && (drawer?.kind === "workout" || !drawer?.event)
+      ? drawer?.kind
+      : null;
+  const closeCreation = useCallback(() => {
+    if (
+      creationDirty &&
+      creationKind &&
+      !window.confirm(`Discard this unsaved ${creationKind}?`)
+    )
       return;
     setDrawer(null);
     setEditing(false);
-    setWorkoutDirty(false);
-  }, [workoutDirty]);
-  const workoutCreated = useCallback(() => {
+    setCreationDirty(false);
+  }, [creationDirty, creationKind]);
+  const creationSaved = useCallback(() => {
     setDrawer(null);
     setEditing(false);
-    setWorkoutDirty(false);
+    setCreationDirty(false);
   }, []);
   return (
     <>
@@ -177,20 +186,22 @@ export function CoachClientWorkspace({
         </div>
       </section>
       <Dialog
-        open={Boolean(workoutOpen)}
+        open={Boolean(creationKind)}
         disablePointerDismissal
         onOpenChange={(open) => {
-          if (!open) closeWorkout();
+          if (!open) closeCreation();
         }}
       >
         <DialogContent
-          className="flex h-[min(90vh,900px)] w-[calc(100vw-2rem)] max-w-[1050px] flex-col gap-0 overflow-hidden p-0 sm:max-w-[1050px]"
+          className={`flex max-h-[90vh] w-[calc(100vw-2rem)] flex-col gap-0 overflow-hidden p-0 ${creationKind === "workout" ? "h-[min(90vh,900px)] max-w-[1050px] sm:max-w-[1050px]" : creationKind === "meal" ? "max-w-[850px] sm:max-w-[850px]" : "max-w-[560px] sm:max-w-[560px]"}`}
           showCloseButton={false}
           overlayClassName="bg-black/40"
         >
           <DialogHeader className="shrink-0 border-b px-5 py-4">
             <div className="flex items-center justify-between gap-3">
-              <DialogTitle className="text-lg">Create workout</DialogTitle>
+              <DialogTitle className="text-lg">
+                Create {creationKind ?? "item"}
+              </DialogTitle>
               <DialogClose
                 render={<Button type="button" variant="ghost" size="sm" />}
               >
@@ -201,22 +212,38 @@ export function CoachClientWorkspace({
               Times use the client&apos;s {timezone} timezone.
             </DialogDescription>
           </DialogHeader>
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
-            {workoutOpen ? (
+          <div
+            className={`min-h-0 overflow-y-auto px-4 py-5 sm:px-6 ${creationKind === "workout" ? "flex-1" : "flex-auto"}`}
+          >
+            {creationKind === "workout" ? (
               <WorkoutBuilder
                 action={actions.workout}
                 createExerciseAction={actions.exercise}
                 exercises={exercises}
                 defaultScheduledAt={defaultAt}
-                onDirtyChange={setWorkoutDirty}
-                onCreated={workoutCreated}
+                onDirtyChange={setCreationDirty}
+                onCreated={creationSaved}
+              />
+            ) : creationKind === "meal" ? (
+              <MealBuilder
+                action={actions.meal}
+                defaultScheduledAt={defaultAt}
+                onDirtyChange={setCreationDirty}
+                onCreated={creationSaved}
+              />
+            ) : creationKind === "supplement" ? (
+              <SupplementForm
+                action={actions.supplement}
+                defaultScheduledAt={defaultAt}
+                onDirtyChange={setCreationDirty}
+                onCreated={creationSaved}
               />
             ) : null}
           </div>
         </DialogContent>
       </Dialog>
       <Sheet
-        open={Boolean(drawer) && !workoutOpen}
+        open={Boolean(drawer) && !creationKind}
         onOpenChange={(open) => {
           if (!open) {
             setDrawer(null);
@@ -267,33 +294,67 @@ export function CoachClientWorkspace({
                 defaultScheduledAt={defaultAt}
               />
             ) : drawer?.kind === "supplement" ? (
-              <MutationForm
+              <SupplementForm
                 action={actions.supplement}
-                submitLabel="Schedule supplement"
-                className="space-y-4"
-              >
-                <Input name="name" placeholder="Supplement" required />
-                <Input
-                  name="dosageText"
-                  placeholder="Assigned dosage"
-                  required
-                />
-                <Input
-                  name="scheduledAt"
-                  type="datetime-local"
-                  defaultValue={defaultAt}
-                  required
-                />
-                <Textarea
-                  name="coachNotes"
-                  placeholder="Coach notes (optional)"
-                />
-              </MutationForm>
+                defaultScheduledAt={defaultAt}
+              />
             ) : null}
           </div>
         </SheetContent>
       </Sheet>
     </>
+  );
+}
+
+function SupplementForm({
+  action,
+  defaultScheduledAt,
+  onDirtyChange,
+  onCreated,
+}: {
+  action: Action;
+  defaultScheduledAt: string;
+  onDirtyChange?: (dirty: boolean) => void;
+  onCreated?: () => void;
+}) {
+  return (
+    <MutationForm
+      action={action}
+      submitLabel="Schedule supplement"
+      className="space-y-4"
+      onDirtyChange={onDirtyChange}
+      onSuccess={onCreated}
+    >
+      <div className="space-y-1.5">
+        <Label htmlFor="supplement-name">Supplement name</Label>
+        <Input id="supplement-name" name="name" maxLength={120} required />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="supplement-dosage">Assigned dosage</Label>
+        <Input
+          id="supplement-dosage"
+          name="dosageText"
+          maxLength={200}
+          required
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="supplement-scheduled-at">
+          Client-local date and time
+        </Label>
+        <Input
+          id="supplement-scheduled-at"
+          name="scheduledAt"
+          type="datetime-local"
+          defaultValue={defaultScheduledAt}
+          required
+        />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="supplement-notes">Coach notes</Label>
+        <Textarea id="supplement-notes" name="coachNotes" maxLength={1000} />
+      </div>
+    </MutationForm>
   );
 }
 
