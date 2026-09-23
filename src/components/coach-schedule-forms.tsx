@@ -3,6 +3,8 @@
 import {
   startTransition,
   useActionState,
+  useEffect,
+  useRef,
   useState,
   useTransition,
   type ReactNode,
@@ -15,13 +17,29 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { rankExercises } from "@/lib/exercise-search";
 
 type ScheduleAction = (
   state: ActionState,
   formData: FormData,
 ) => Promise<ActionState>;
 
-type ExerciseOption = { id: string; name: string; scope: string };
+type ExerciseOption = {
+  id: string;
+  name: string;
+  scope: string;
+  muscleGroup?: string;
+  equipment?: string;
+  category?: string;
+};
 
 type WorkoutValues = {
   name: string;
@@ -45,11 +63,15 @@ export function WorkoutBuilder({
   createExerciseAction,
   exercises,
   defaultScheduledAt = "",
+  onDirtyChange,
+  onCreated,
 }: {
   action: ScheduleAction;
   createExerciseAction: ScheduleAction;
   exercises: ExerciseOption[];
   defaultScheduledAt?: string;
+  onDirtyChange?: (dirty: boolean) => void;
+  onCreated?: () => void;
 }) {
   const [state, dispatch, pending] = useActionState(action, initialActionState);
   const [exerciseCatalog, setExerciseCatalog] = useState(exercises);
@@ -60,7 +82,7 @@ export function WorkoutBuilder({
       notes: "",
       exercises: [
         {
-          exerciseId: exercises[0]?.id ?? "",
+          exerciseId: "",
           notes: "",
           sets: Array.from({ length: 3 }, () => ({
             repsMin: "8",
@@ -74,6 +96,11 @@ export function WorkoutBuilder({
     },
   });
   const items = useFieldArray({ control: form.control, name: "exercises" });
+  const { isDirty } = form.formState;
+  useEffect(() => onDirtyChange?.(isDirty), [isDirty, onDirtyChange]);
+  useEffect(() => {
+    if (state.ok) onCreated?.();
+  }, [state.ok, onCreated]);
 
   const submit = form.handleSubmit((values) => {
     const data = new FormData();
@@ -147,7 +174,7 @@ export function WorkoutBuilder({
           className="w-full"
           onClick={() =>
             items.append({
-              exerciseId: exerciseCatalog[0]?.id ?? "",
+              exerciseId: "",
               notes: "",
               sets: Array.from({ length: 3 }, () => ({
                 repsMin: "8",
@@ -198,28 +225,40 @@ function ExerciseEditor({
   });
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
+  const [creatorName, setCreatorName] = useState("");
   const [muscleGroup, setMuscleGroup] = useState("CHEST");
   const [equipment, setEquipment] = useState("BARBELL");
   const [category, setCategory] = useState("COMPOUND");
   const [createMessage, setCreateMessage] = useState("");
   const [createPending, startCreateTransition] = useTransition();
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+  const [activeMatch, setActiveMatch] = useState(0);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const closeCreator = () => {
+    setCreating(false);
+    requestAnimationFrame(() => searchRef.current?.focus());
+  };
   const selectedId = useWatch({
     control: form.control,
     name: `exercises.${index}.exerciseId`,
   });
-  const matches = exercises
-    .filter((exercise) =>
-      exercise.name.toLowerCase().includes(search.toLowerCase()),
-    )
-    .slice(0, 10);
-  const normalizedSearch = search.trim().toLowerCase();
-  const hasExactMatch = exercises.some(
-    (exercise) => exercise.name.trim().toLowerCase() === normalizedSearch,
-  );
+  const matches = rankExercises(exercises, search);
+  const selectExercise = (exercise: ExerciseOption) => {
+    form.setValue(`exercises.${index}.exerciseId`, exercise.id, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+    setSearch(exercise.name);
+    setSuggestionsOpen(false);
+    searchRef.current?.focus();
+  };
   const createExercise = () => {
-    if (!search.trim()) return;
+    if (!creatorName.trim()) {
+      setCreateMessage("Enter an exercise name.");
+      return;
+    }
     const data = new FormData();
-    data.set("name", search.trim());
+    data.set("name", creatorName.trim());
     data.set("muscleGroup", muscleGroup);
     data.set("equipment", equipment);
     data.set("category", category);
@@ -229,13 +268,8 @@ function ExerciseEditor({
       setCreateMessage(result.message);
       if (!result.createdExercise) return;
       onExerciseCreated(result.createdExercise);
-      form.setValue(
-        `exercises.${index}.exerciseId`,
-        result.createdExercise.id,
-        { shouldDirty: true },
-      );
-      setSearch(result.createdExercise.name);
-      setCreating(false);
+      selectExercise(result.createdExercise);
+      closeCreator();
     });
   };
   const addPreset = (count: number, reps: number) =>
@@ -250,155 +284,277 @@ function ExerciseEditor({
     );
   return (
     <fieldset className="space-y-3 rounded-xl border p-3">
-      <div className="flex items-center gap-2">
-        <div className="relative min-w-0 flex-1">
-          <Search className="text-muted-foreground absolute top-2.5 left-3 size-4" />
+      <div className="flex flex-wrap items-start gap-2">
+        <div className="relative min-w-56 flex-1">
+          <label
+            className="mb-1.5 block text-sm font-medium"
+            htmlFor={`exercise-search-${index}`}
+          >
+            Exercise {index + 1}
+          </label>
+          <Search className="text-muted-foreground absolute top-9 left-3 size-4" />
           <Input
+            ref={searchRef}
+            id={`exercise-search-${index}`}
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search exercises"
+            onFocus={() => setSuggestionsOpen(true)}
+            onBlur={() => setSuggestionsOpen(false)}
+            onChange={(event) => {
+              setSearch(event.target.value);
+              setActiveMatch(0);
+              setSuggestionsOpen(true);
+              if (selectedId)
+                form.setValue(`exercises.${index}.exerciseId`, "", {
+                  shouldDirty: true,
+                });
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Escape" && suggestionsOpen) {
+                setSuggestionsOpen(false);
+                event.stopPropagation();
+              } else if (event.key === "ArrowDown" && matches.length) {
+                event.preventDefault();
+                setSuggestionsOpen(true);
+                setActiveMatch((current) => (current + 1) % matches.length);
+              } else if (event.key === "ArrowUp" && matches.length) {
+                event.preventDefault();
+                setActiveMatch(
+                  (current) => (current - 1 + matches.length) % matches.length,
+                );
+              } else if (
+                event.key === "Enter" &&
+                suggestionsOpen &&
+                matches.length
+              ) {
+                event.preventDefault();
+                selectExercise(matches[activeMatch] ?? matches[0]);
+              }
+            }}
+            placeholder="Type an exercise name"
             className="pl-9"
-            aria-label={`Search exercise ${index + 1}`}
+            role="combobox"
+            aria-autocomplete="list"
+            aria-expanded={suggestionsOpen && Boolean(search.trim())}
+            aria-controls={
+              suggestionsOpen && search.trim()
+                ? `exercise-results-${index}`
+                : undefined
+            }
+            aria-activedescendant={
+              suggestionsOpen && matches.length
+                ? `exercise-result-${index}-${activeMatch}`
+                : undefined
+            }
           />
-        </div>
-        <select
-          aria-label={`Exercise ${index + 1}`}
-          className="bg-background h-10 min-w-36 rounded-lg border px-3 text-sm"
-          {...form.register(`exercises.${index}.exerciseId`)}
-        >
-          {matches.map((exercise) => (
-            <option key={exercise.id} value={exercise.id}>
-              {exercise.name} {exercise.scope === "COACH" ? "(custom)" : ""}
-            </option>
-          ))}
-          {!matches.some((item) => item.id === selectedId)
-            ? exercises
-                .filter((item) => item.id === selectedId)
-                .map((exercise) => (
-                  <option key={exercise.id} value={exercise.id}>
-                    {exercise.name}
-                  </option>
-                ))
-            : null}
-        </select>
-        <Button
-          type="button"
-          size="icon"
-          variant="outline"
-          aria-label="Move exercise up"
-          disabled={first}
-          onClick={onUp}
-        >
-          <ArrowUp />
-        </Button>
-        <Button
-          type="button"
-          size="icon"
-          variant="outline"
-          aria-label="Move exercise down"
-          disabled={last}
-          onClick={onDown}
-        >
-          <ArrowDown />
-        </Button>
-        <Button
-          type="button"
-          size="icon"
-          variant="destructive"
-          aria-label="Remove exercise"
-          disabled={!canRemove}
-          onClick={onRemove}
-        >
-          <Trash2 />
-        </Button>
-      </div>
-      {normalizedSearch && !hasExactMatch ? (
-        <div className="rounded-lg border border-dashed p-3">
-          {!creating ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              onClick={() => setCreating(true)}
+          <input
+            type="hidden"
+            {...form.register(`exercises.${index}.exerciseId`, {
+              required: "Select an exercise.",
+            })}
+          />
+          {form.formState.errors.exercises?.[index]?.exerciseId ? (
+            <p className="text-destructive mt-1 text-xs" role="alert">
+              Select an exercise from the results.
+            </p>
+          ) : null}
+          {suggestionsOpen && search.trim() ? (
+            <div
+              id={`exercise-results-${index}`}
+              role="listbox"
+              className="bg-popover absolute z-10 mt-1 w-full overflow-hidden rounded-lg border shadow-lg"
             >
-              <Plus /> Create &quot;{search.trim()}&quot;
-            </Button>
-          ) : (
-            <div className="space-y-3">
-              <p className="text-sm font-medium">
-                Create &quot;{search.trim()}&quot;
-              </p>
-              <div className="grid gap-2 sm:grid-cols-3">
-                <select
-                  aria-label="Muscle group"
-                  className="bg-background h-10 rounded-lg border px-3 text-sm"
-                  value={muscleGroup}
-                  onChange={(event) => setMuscleGroup(event.target.value)}
-                >
-                  {["CHEST", "BACK", "SHOULDERS", "LEGS", "ARMS", "CORE"].map(
-                    (value) => (
-                      <option key={value}>{value}</option>
-                    ),
-                  )}
-                </select>
-                <select
-                  aria-label="Equipment"
-                  className="bg-background h-10 rounded-lg border px-3 text-sm"
-                  value={equipment}
-                  onChange={(event) => setEquipment(event.target.value)}
-                >
-                  {[
-                    "BARBELL",
-                    "DUMBBELL",
-                    "CABLE",
-                    "BODYWEIGHT",
-                    "PIN_LOADED_MACHINE",
-                    "PLATE_LOADED_MACHINE",
-                  ].map((value) => (
-                    <option key={value}>{value}</option>
-                  ))}
-                </select>
-                <select
-                  aria-label="Exercise category"
-                  className="bg-background h-10 rounded-lg border px-3 text-sm"
-                  value={category}
-                  onChange={(event) => setCategory(event.target.value)}
-                >
-                  {["COMPOUND", "ISOLATION", "CARDIO", "MOBILITY"].map(
-                    (value) => (
-                      <option key={value}>{value}</option>
-                    ),
-                  )}
-                </select>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={createPending}
-                  onClick={createExercise}
-                >
-                  {createPending ? "Creating..." : "Create and select"}
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  disabled={createPending}
-                  onClick={() => setCreating(false)}
-                >
-                  Cancel
-                </Button>
-                {createMessage ? (
-                  <span className="text-muted-foreground text-sm" role="status">
-                    {createMessage}
-                  </span>
-                ) : null}
-              </div>
+              {matches.length ? (
+                matches.map((exercise, matchIndex) => (
+                  <button
+                    key={exercise.id}
+                    id={`exercise-result-${index}-${matchIndex}`}
+                    type="button"
+                    role="option"
+                    aria-selected={matchIndex === activeMatch}
+                    className="hover:bg-muted focus-visible:bg-muted focus-visible:outline-ring block w-full px-3 py-2 text-left focus-visible:outline-2"
+                    onPointerDown={(event) => event.preventDefault()}
+                    onClick={() => selectExercise(exercise)}
+                  >
+                    <span className="block text-sm font-medium">
+                      {exercise.name}
+                    </span>
+                    <span className="text-muted-foreground block text-xs">
+                      {[
+                        exercise.muscleGroup,
+                        exercise.equipment?.replaceAll("_", " "),
+                        exercise.category?.toLowerCase(),
+                      ]
+                        .filter(Boolean)
+                        .join(" · ") ||
+                        (exercise.scope === "COACH"
+                          ? "Custom exercise"
+                          : "Library exercise")}
+                    </span>
+                  </button>
+                ))
+              ) : (
+                <p className="text-muted-foreground px-3 py-2 text-sm">
+                  No matches found.
+                </p>
+              )}
             </div>
-          )}
+          ) : null}
+          {selectedId && !suggestionsOpen ? (
+            <p className="text-muted-foreground mt-1 text-xs">
+              Selected exercise
+            </p>
+          ) : null}
         </div>
-      ) : null}
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="mt-6"
+          onClick={() => {
+            setCreatorName(search);
+            setCreateMessage("");
+            setSuggestionsOpen(false);
+            setCreating(true);
+          }}
+        >
+          <Plus /> Add exercise
+        </Button>
+        <div className="mt-6 flex gap-1">
+          <Button
+            type="button"
+            size="icon"
+            variant="outline"
+            aria-label="Move exercise up"
+            disabled={first}
+            onClick={onUp}
+          >
+            <ArrowUp />
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="outline"
+            aria-label="Move exercise down"
+            disabled={last}
+            onClick={onDown}
+          >
+            <ArrowDown />
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="destructive"
+            aria-label="Remove exercise"
+            disabled={!canRemove}
+            onClick={onRemove}
+          >
+            <Trash2 />
+          </Button>
+        </div>
+      </div>
+      <Sheet
+        open={creating}
+        onOpenChange={(open) => {
+          if (!open && !createPending) closeCreator();
+        }}
+        disablePointerDismissal
+      >
+        <SheetContent
+          className="z-[60] w-full overflow-y-auto sm:max-w-md"
+          showCloseButton={false}
+        >
+          <SheetHeader>
+            <SheetTitle>Create exercise</SheetTitle>
+            <SheetDescription>
+              Add a custom exercise to your catalog and select it for this
+              workout.
+            </SheetDescription>
+          </SheetHeader>
+          <form
+            className="space-y-4 px-4 pb-8"
+            onSubmit={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              createExercise();
+            }}
+          >
+            <Field label="Name">
+              <Input
+                autoFocus
+                value={creatorName}
+                onChange={(event) => setCreatorName(event.target.value)}
+                maxLength={120}
+                required
+              />
+            </Field>
+            {createMessage ? (
+              <p className="text-destructive text-sm" role="alert">
+                {createMessage}
+              </p>
+            ) : null}
+            <Field label="Muscle group">
+              <select
+                className="bg-background h-10 w-full rounded-lg border px-3 text-sm"
+                value={muscleGroup}
+                onChange={(event) => setMuscleGroup(event.target.value)}
+              >
+                {["CHEST", "BACK", "SHOULDERS", "LEGS", "ARMS", "CORE"].map(
+                  (value) => (
+                    <option key={value}>{value}</option>
+                  ),
+                )}
+              </select>
+            </Field>
+            <Field label="Equipment">
+              <select
+                className="bg-background h-10 w-full rounded-lg border px-3 text-sm"
+                value={equipment}
+                onChange={(event) => setEquipment(event.target.value)}
+              >
+                {[
+                  "BARBELL",
+                  "DUMBBELL",
+                  "CABLE",
+                  "BODYWEIGHT",
+                  "PIN_LOADED_MACHINE",
+                  "PLATE_LOADED_MACHINE",
+                ].map((value) => (
+                  <option key={value}>{value}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Category">
+              <select
+                className="bg-background h-10 w-full rounded-lg border px-3 text-sm"
+                value={category}
+                onChange={(event) => setCategory(event.target.value)}
+              >
+                {["COMPOUND", "ISOLATION", "CARDIO", "MOBILITY"].map(
+                  (value) => (
+                    <option key={value}>{value}</option>
+                  ),
+                )}
+              </select>
+            </Field>
+            <div className="flex gap-2">
+              <Button type="submit" disabled={createPending}>
+                {createPending ? "Creating..." : "Create and select"}
+              </Button>
+              <SheetClose
+                render={
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={createPending}
+                  />
+                }
+              >
+                Cancel
+              </SheetClose>
+            </div>
+          </form>
+        </SheetContent>
+      </Sheet>
       <Input
         placeholder="Exercise notes (optional)"
         aria-label={`Notes for exercise ${index + 1}`}

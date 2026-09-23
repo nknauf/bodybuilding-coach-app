@@ -37,7 +37,14 @@ export default async function CoachClientPage({
         isActive: true,
         OR: [{ scope: "GLOBAL" }, { ownerCoachId: coachId }],
       },
-      select: { id: true, name: true, scope: true },
+      select: {
+        id: true,
+        name: true,
+        scope: true,
+        muscleGroup: true,
+        equipment: true,
+        category: true,
+      },
       orderBy: { name: "asc" },
     }),
     db.workoutSetLog.findMany({

@@ -87,9 +87,23 @@ export async function createExerciseAction(
         id: exercise.id,
         name: exercise.name,
         scope: "COACH",
+        muscleGroup: exercise.muscleGroup,
+        equipment: exercise.equipment,
+        category: exercise.category,
       },
     };
   } catch (error) {
+    if (
+      error &&
+      typeof error === "object" &&
+      "code" in error &&
+      error.code === "P2002"
+    ) {
+      return {
+        ok: false,
+        message: "An exercise with this name already exists in your catalog.",
+      };
+    }
     return actionError(error);
   }
 }

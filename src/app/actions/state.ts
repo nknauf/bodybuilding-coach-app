@@ -9,6 +9,9 @@ export interface ActionState {
     id: string;
     name: string;
     scope: "COACH";
+    muscleGroup?: string;
+    equipment?: string;
+    category?: string;
   };
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { CalendarPlus, Dumbbell, Plus, Salad, Sparkles } from "lucide-react";
 import type { ActionState } from "@/app/actions/state";
 import { WorkoutBuilder, MealBuilder } from "@/components/coach-schedule-forms";
@@ -8,6 +8,14 @@ import { MutationForm } from "@/components/mutation-form";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Sheet,
   SheetContent,
@@ -53,11 +61,25 @@ export function CoachClientWorkspace({
     date?: string;
   } | null>(null);
   const [editing, setEditing] = useState(false);
+  const [workoutDirty, setWorkoutDirty] = useState(false);
   const openCreate = (kind: Kind, date?: string) => {
     setEditing(true);
     setDrawer({ kind, date });
   };
   const defaultAt = drawer?.date ? `${drawer.date}T12:00` : "";
+  const workoutOpen = drawer?.kind === "workout" && editing;
+  const closeWorkout = useCallback(() => {
+    if (workoutDirty && !window.confirm("Discard this unsaved workout?"))
+      return;
+    setDrawer(null);
+    setEditing(false);
+    setWorkoutDirty(false);
+  }, [workoutDirty]);
+  const workoutCreated = useCallback(() => {
+    setDrawer(null);
+    setEditing(false);
+    setWorkoutDirty(false);
+  }, []);
   return (
     <>
       <section aria-labelledby="weekly-plan" className="space-y-3">
@@ -154,8 +176,47 @@ export function CoachClientWorkspace({
           />
         </div>
       </section>
+      <Dialog
+        open={Boolean(workoutOpen)}
+        disablePointerDismissal
+        onOpenChange={(open) => {
+          if (!open) closeWorkout();
+        }}
+      >
+        <DialogContent
+          className="flex h-[min(90vh,900px)] w-[calc(100vw-2rem)] max-w-[1050px] flex-col gap-0 overflow-hidden p-0 sm:max-w-[1050px]"
+          showCloseButton={false}
+          overlayClassName="bg-black/40"
+        >
+          <DialogHeader className="shrink-0 border-b px-5 py-4">
+            <div className="flex items-center justify-between gap-3">
+              <DialogTitle className="text-lg">Create workout</DialogTitle>
+              <DialogClose
+                render={<Button type="button" variant="ghost" size="sm" />}
+              >
+                Close
+              </DialogClose>
+            </div>
+            <DialogDescription>
+              Times use the client&apos;s {timezone} timezone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
+            {workoutOpen ? (
+              <WorkoutBuilder
+                action={actions.workout}
+                createExerciseAction={actions.exercise}
+                exercises={exercises}
+                defaultScheduledAt={defaultAt}
+                onDirtyChange={setWorkoutDirty}
+                onCreated={workoutCreated}
+              />
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
       <Sheet
-        open={Boolean(drawer)}
+        open={Boolean(drawer) && !workoutOpen}
         onOpenChange={(open) => {
           if (!open) {
             setDrawer(null);
@@ -199,15 +260,6 @@ export function CoachClientWorkspace({
                   Existing safe rescheduling rules remain enforced. Editing
                   scheduled content is intentionally separate from viewing.
                 </p>
-              </div>
-            ) : drawer?.kind === "workout" ? (
-              <div className="space-y-6">
-                <WorkoutBuilder
-                  action={actions.workout}
-                  createExerciseAction={actions.exercise}
-                  exercises={exercises}
-                  defaultScheduledAt={defaultAt}
-                />
               </div>
             ) : drawer?.kind === "meal" ? (
               <MealBuilder

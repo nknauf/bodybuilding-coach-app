@@ -9,14 +9,22 @@ const source = (relativePath: string) =>
   );
 
 describe("workout creation and client home regressions", () => {
-  it("keeps multi-exercise and inline custom-exercise controls in the authenticated builder", () => {
+  it("keeps the workout form mounted under the creator sheet and uses the existing actions", () => {
     const builder = source("src/components/coach-schedule-forms.tsx");
+    const workspace = source("src/components/coach-client-workspace.tsx");
     const action = source("src/app/actions/coach.ts");
 
     expect(builder).toContain("<Plus /> Add exercise");
-    expect(builder).toContain("Create &quot;{search.trim()}&quot;");
-    expect(builder).toContain("result.createdExercise.id");
+    expect(builder).toContain("open={creating}");
+    expect(builder).toContain("setCreatorName(search)");
+    expect(builder).toContain("selectExercise(result.createdExercise)");
+    expect(builder).toContain("rankExercises(exercises, search)");
+    expect(workspace).toContain("h-[min(90vh,900px)]");
+    expect(workspace).toContain("sm:max-w-[1050px]");
+    expect(workspace).toContain("disablePointerDismissal");
+    expect(workspace).toContain("Discard this unsaved workout?");
     expect(action).toContain("createdExercise: {");
+    expect(action).toContain("revalidatePath(`/coach/clients/${clientId}`)");
   });
 
   it("stacks demo Today actions above the weekly calendar at every breakpoint", () => {
