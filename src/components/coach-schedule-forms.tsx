@@ -41,14 +41,17 @@ type ExerciseOption = {
   category?: string;
 };
 
-type WorkoutValues = {
+export type WorkoutValues = {
   name: string;
   scheduledAt: string;
   notes: string;
   exercises: {
+    id?: string;
     exerciseId: string;
+    exerciseName?: string;
     notes: string;
     sets: {
+      id?: string;
       repsMin: string;
       repsMax: string;
       weight: string;
@@ -60,6 +63,8 @@ type WorkoutValues = {
 
 export function WorkoutBuilder({
   action,
+  mode = "create",
+  initialValues,
   createExerciseAction,
   exercises,
   defaultScheduledAt = "",
@@ -67,6 +72,8 @@ export function WorkoutBuilder({
   onCreated,
 }: {
   action: ScheduleAction;
+  mode?: "create" | "edit";
+  initialValues?: WorkoutValues;
   createExerciseAction: ScheduleAction;
   exercises: ExerciseOption[];
   defaultScheduledAt?: string;
@@ -76,7 +83,7 @@ export function WorkoutBuilder({
   const [state, dispatch, pending] = useActionState(action, initialActionState);
   const [exerciseCatalog, setExerciseCatalog] = useState(exercises);
   const form = useForm<WorkoutValues>({
-    defaultValues: {
+    defaultValues: initialValues ?? {
       name: "",
       scheduledAt: defaultScheduledAt,
       notes: "",
@@ -95,8 +102,16 @@ export function WorkoutBuilder({
       ],
     },
   });
-  const items = useFieldArray({ control: form.control, name: "exercises" });
+  const items = useFieldArray({
+    control: form.control,
+    name: "exercises",
+    keyName: "fieldKey",
+  });
   const { isDirty } = form.formState;
+  const { reset } = form;
+  useEffect(() => {
+    if (initialValues && !isDirty) reset(initialValues);
+  }, [initialValues, isDirty, reset]);
   useEffect(() => onDirtyChange?.(isDirty), [isDirty, onDirtyChange]);
   useEffect(() => {
     if (state.ok) onCreated?.();
@@ -110,9 +125,11 @@ export function WorkoutBuilder({
         ...values,
         notes: values.notes || undefined,
         exercises: values.exercises.map((exercise) => ({
+          id: exercise.id,
           exerciseId: exercise.exerciseId,
           notes: exercise.notes || undefined,
           sets: exercise.sets.map((set) => ({
+            id: set.id,
             targetRepsMin: Number(set.repsMin),
             targetRepsMax: Number(set.repsMax || set.repsMin),
             targetWeight: set.weight === "" ? undefined : Number(set.weight),
@@ -127,6 +144,11 @@ export function WorkoutBuilder({
 
   return (
     <form onSubmit={submit} className="space-y-4">
+      {!state.ok && state.message ? (
+        <p className="text-destructive text-sm" role="alert">
+          {state.message}
+        </p>
+      ) : null}
       <Field label="Workout name">
         <Input {...form.register("name")} required maxLength={120} />
       </Field>
@@ -146,7 +168,7 @@ export function WorkoutBuilder({
         <Label>Exercises and assigned sets</Label>
         {items.fields.map((item, index) => (
           <ExerciseEditor
-            key={item.id}
+            key={`${item.fieldKey}-${index}`}
             index={index}
             form={form}
             exercises={exerciseCatalog}
@@ -189,7 +211,11 @@ export function WorkoutBuilder({
           <Plus /> Add exercise
         </Button>
       </div>
-      <ActionFooter pending={pending} state={state} label="Schedule workout" />
+      <ActionFooter
+        pending={pending}
+        state={state}
+        label={mode === "edit" ? "Save workout" : "Schedule workout"}
+      />
     </form>
   );
 }
@@ -222,8 +248,14 @@ function ExerciseEditor({
   const sets = useFieldArray({
     control: form.control,
     name: `exercises.${index}.sets`,
+    keyName: "fieldKey",
   });
-  const [search, setSearch] = useState("");
+  const selectedExercise = form.getValues(`exercises.${index}`);
+  const [search, setSearch] = useState(
+    selectedExercise.exerciseName ??
+      exercises.find((item) => item.id === selectedExercise.exerciseId)?.name ??
+      "",
+  );
   const [creating, setCreating] = useState(false);
   const [creatorName, setCreatorName] = useState("");
   const [muscleGroup, setMuscleGroup] = useState("CHEST");
@@ -581,18 +613,20 @@ function ExerciseEditor({
             </Button>
           ))}
         </div>
-        <div className="text-muted-foreground hidden grid-cols-[2.5rem_1fr_1fr_1fr_1fr_2rem] gap-2 px-1 text-xs sm:grid">
+        <div className="text-muted-foreground hidden grid-cols-[2.5rem_1fr_1fr_1fr_1fr_2rem_2rem_2rem] gap-2 px-1 text-xs sm:grid">
           <span>Set</span>
           <span>Weight</span>
           <span>Min reps</span>
           <span>Max reps</span>
           <span>RPE/RIR</span>
           <span />
+          <span />
+          <span />
         </div>
         {sets.fields.map((set, setIndex) => (
           <div
-            key={set.id}
-            className="grid grid-cols-[2rem_1fr_1fr] items-center gap-2 sm:grid-cols-[2.5rem_1fr_1fr_1fr_1fr_2rem]"
+            key={set.fieldKey}
+            className="grid grid-cols-[2rem_1fr_1fr] items-center gap-2 sm:grid-cols-[2.5rem_1fr_1fr_1fr_1fr_2rem_2rem_2rem]"
           >
             <Label>{setIndex + 1}</Label>
             <Input
@@ -600,7 +634,7 @@ function ExerciseEditor({
               inputMode="decimal"
               type="number"
               min={0}
-              step="0.5"
+              step="0.01"
               placeholder="BW"
               {...form.register(`exercises.${index}.sets.${setIndex}.weight`)}
             />
@@ -629,6 +663,26 @@ function ExerciseEditor({
               placeholder="—"
               {...form.register(`exercises.${index}.sets.${setIndex}.effort`)}
             />
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              aria-label="Move assigned set up"
+              disabled={setIndex === 0}
+              onClick={() => sets.swap(setIndex, setIndex - 1)}
+            >
+              <ArrowUp />
+            </Button>
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              aria-label="Move assigned set down"
+              disabled={setIndex === sets.fields.length - 1}
+              onClick={() => sets.swap(setIndex, setIndex + 1)}
+            >
+              <ArrowDown />
+            </Button>
             <Button
               type="button"
               size="icon"
@@ -665,7 +719,7 @@ function ExerciseEditor({
             variant="outline"
             onClick={() => {
               const previous = form.getValues(`exercises.${index}.sets`).at(-1);
-              if (previous) sets.append({ ...previous });
+              if (previous) sets.append({ ...previous, id: undefined });
             }}
           >
             <Copy /> Duplicate previous
@@ -676,7 +730,7 @@ function ExerciseEditor({
   );
 }
 
-type MealValues = {
+export type MealValues = {
   name: string;
   description: string;
   scheduledAt: string;
@@ -689,18 +743,22 @@ type MealValues = {
 
 export function MealBuilder({
   action,
+  mode = "create",
+  initialValues,
   defaultScheduledAt = "",
   onDirtyChange,
   onCreated,
 }: {
   action: ScheduleAction;
+  mode?: "create" | "edit";
+  initialValues?: MealValues;
   defaultScheduledAt?: string;
   onDirtyChange?: (dirty: boolean) => void;
   onCreated?: () => void;
 }) {
   const [state, dispatch, pending] = useActionState(action, initialActionState);
   const form = useForm<MealValues>({
-    defaultValues: {
+    defaultValues: initialValues ?? {
       name: "",
       description: "",
       scheduledAt: defaultScheduledAt,
@@ -716,6 +774,10 @@ export function MealBuilder({
     name: "ingredients",
   });
   const { isDirty } = form.formState;
+  const { reset } = form;
+  useEffect(() => {
+    if (initialValues && !isDirty) reset(initialValues);
+  }, [initialValues, isDirty, reset]);
   useEffect(() => onDirtyChange?.(isDirty), [isDirty, onDirtyChange]);
   useEffect(() => {
     if (state.ok) onCreated?.();
@@ -743,6 +805,11 @@ export function MealBuilder({
   });
   return (
     <form onSubmit={submit} className="space-y-4">
+      {!state.ok && state.message ? (
+        <p className="text-destructive text-sm" role="alert">
+          {state.message}
+        </p>
+      ) : null}
       <Field label="Meal name">
         <Input {...form.register("name")} required maxLength={120} />
       </Field>
@@ -821,6 +888,26 @@ export function MealBuilder({
               type="button"
               size="icon"
               variant="ghost"
+              aria-label="Move ingredient up"
+              disabled={index === 0}
+              onClick={() => ingredients.swap(index, index - 1)}
+            >
+              <ArrowUp />
+            </Button>
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              aria-label="Move ingredient down"
+              disabled={index === ingredients.fields.length - 1}
+              onClick={() => ingredients.swap(index, index + 1)}
+            >
+              <ArrowDown />
+            </Button>
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
               aria-label="Remove ingredient"
               onClick={() => ingredients.remove(index)}
             >
@@ -829,7 +916,11 @@ export function MealBuilder({
           </div>
         ))}
       </div>
-      <ActionFooter pending={pending} state={state} label="Schedule meal" />
+      <ActionFooter
+        pending={pending}
+        state={state}
+        label={mode === "edit" ? "Save meal" : "Schedule meal"}
+      />
     </form>
   );
 }
@@ -857,7 +948,7 @@ function ActionFooter({
       <Button type="submit" disabled={pending}>
         {pending ? "Saving..." : label}
       </Button>
-      {state.message ? (
+      {state.ok && state.message ? (
         <p
           className={
             state.ok ? "text-sm text-emerald-700" : "text-destructive text-sm"

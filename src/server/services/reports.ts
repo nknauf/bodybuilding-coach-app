@@ -38,9 +38,11 @@ export async function getClientReport(
         },
         include: {
           exercises: {
+            where: { archivedAt: null },
             orderBy: { orderIndex: "asc" },
             include: {
               assignedSets: {
+                where: { archivedAt: null },
                 orderBy: { orderIndex: "asc" },
                 include: { log: true },
               },
@@ -57,6 +59,7 @@ export async function getClientReport(
           scheduledAt: { gte: options.start, lte: options.end },
         },
         orderBy: { scheduledAt: "asc" },
+        include: { ingredients: { orderBy: { orderIndex: "asc" } } },
       }),
       tx.supplementEvent.findMany({
         where: {

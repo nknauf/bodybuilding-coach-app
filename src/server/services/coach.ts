@@ -18,6 +18,9 @@ import {
   exerciseSchema,
   mealSchema,
   supplementSchema,
+  updateMealSchema,
+  updateSupplementSchema,
+  updateWorkoutSchema,
   uuidSchema,
   workoutSchema,
 } from "@/server/validation/schemas";
@@ -418,6 +421,303 @@ export async function scheduleSupplement(actor: Actor, rawInput: unknown) {
       },
     });
     return supplement;
+  });
+}
+
+export async function updateWorkout(actor: Actor, rawInput: unknown) {
+  const coachId = requireCoachProfileId(actor);
+  const input = updateWorkoutSchema.parse(rawInput);
+  return db.$transaction(async (tx) => {
+    const client = await requireAccessibleClient(tx, actor, input.clientId);
+    const workout = await tx.workout.findFirst({
+      where: { id: input.workoutId, clientId: client.id, coachId },
+      include: {
+        exercises: {
+          include: { assignedSets: true, setLogs: true },
+        },
+      },
+    });
+    if (!workout) throw new AuthorizationError();
+    const exerciseIds = input.exercises.map((item) => item.exerciseId);
+    const catalog = await tx.exercise.findMany({
+      where: {
+        id: { in: exerciseIds },
+        OR: [{ scope: "GLOBAL" }, { scope: "COACH", ownerCoachId: coachId }],
+      },
+    });
+    const catalogById = new Map(catalog.map((item) => [item.id, item]));
+    if (catalogById.size !== new Set(exerciseIds).size)
+      throw new AuthorizationError();
+    const active = workout.exercises.filter((item) => !item.archivedAt);
+    const existingById = new Map(active.map((item) => [item.id, item]));
+    const submittedIds = input.exercises.flatMap((item) =>
+      item.id ? [item.id] : [],
+    );
+    if (
+      new Set(submittedIds).size !== submittedIds.length ||
+      submittedIds.some((id) => !existingById.has(id))
+    )
+      throw new AuthorizationError();
+    const now = new Date();
+    let archivedExerciseIndex = Math.min(
+      -1,
+      ...workout.exercises.map((item) => item.orderIndex - 1),
+    );
+    // Free all active order indexes before reordering, deleting, or creating rows.
+    for (const [index, item] of active.entries())
+      await tx.workoutExercise.update({
+        where: { id: item.id },
+        data: { orderIndex: 100000 + index },
+      });
+    const retained = new Set(submittedIds);
+    for (const item of active.filter((item) => !retained.has(item.id))) {
+      const logged = await tx.workoutSetLog.count({
+        where: { workoutExerciseId: item.id },
+      });
+      if (logged) {
+        await tx.workoutExercise.update({
+          where: { id: item.id },
+          data: {
+            archivedAt: now,
+            orderIndex: archivedExerciseIndex--,
+            assignedSets: {
+              updateMany: { where: {}, data: { archivedAt: now } },
+            },
+          },
+        });
+      } else await tx.workoutExercise.delete({ where: { id: item.id } });
+    }
+    for (const [orderIndex, item] of input.exercises.entries()) {
+      const catalogExercise = catalogById.get(item.exerciseId)!;
+      const old = item.id ? existingById.get(item.id) : undefined;
+      const catalogChanged = old && old.exerciseId !== item.exerciseId;
+      const hasLogs =
+        catalogChanged &&
+        (await tx.workoutSetLog.count({
+          where: { workoutExerciseId: old.id },
+        }));
+      if (old && hasLogs) {
+        await tx.workoutExercise.update({
+          where: { id: old.id },
+          data: {
+            archivedAt: now,
+            orderIndex: archivedExerciseIndex--,
+            assignedSets: {
+              updateMany: { where: {}, data: { archivedAt: now } },
+            },
+          },
+        });
+      }
+      if (!old || hasLogs) {
+        await tx.workoutExercise.create({
+          data: {
+            workoutId: workout.id,
+            exerciseId: item.exerciseId,
+            exerciseNameSnapshot: catalogExercise.name,
+            orderIndex,
+            coachNotes: item.notes || null,
+            assignedSets: {
+              create: item.sets.map((set, index) => ({
+                orderIndex: index,
+                expectedReps: set.targetRepsMin,
+                targetRepsMin: set.targetRepsMin,
+                targetRepsMax: set.targetRepsMax,
+                targetWeight: set.targetWeight ?? null,
+                targetWeightUnit: set.targetWeightUnit ?? null,
+                targetEffort: set.targetEffort ?? null,
+              })),
+            },
+          },
+        });
+        continue;
+      }
+      const oldSets = old.assignedSets.filter((set) => !set.archivedAt);
+      const setsById = new Map(oldSets.map((set) => [set.id, set]));
+      const setIds = item.sets.flatMap((set) => (set.id ? [set.id] : []));
+      if (
+        new Set(setIds).size !== setIds.length ||
+        setIds.some((id) => !setsById.has(id))
+      )
+        throw new AuthorizationError();
+      for (const [index, set] of oldSets.entries())
+        await tx.assignedSet.update({
+          where: { id: set.id },
+          data: { orderIndex: 100000 + index },
+        });
+      let archivedSetIndex = Math.min(
+        -1,
+        ...old.assignedSets.map((set) => set.orderIndex - 1),
+      );
+      const keptSets = new Set(setIds);
+      for (const set of oldSets.filter((set) => !keptSets.has(set.id))) {
+        const logged = await tx.workoutSetLog.count({
+          where: { assignedSetId: set.id },
+        });
+        if (logged)
+          await tx.assignedSet.update({
+            where: { id: set.id },
+            data: { archivedAt: now, orderIndex: archivedSetIndex-- },
+          });
+        else await tx.assignedSet.delete({ where: { id: set.id } });
+      }
+      await tx.workoutExercise.update({
+        where: { id: old.id },
+        data: {
+          exerciseId: item.exerciseId,
+          exerciseNameSnapshot: catalogChanged
+            ? catalogExercise.name
+            : old.exerciseNameSnapshot,
+          coachNotes: item.notes || null,
+          orderIndex,
+        },
+      });
+      for (const [setIndex, set] of item.sets.entries()) {
+        const data = {
+          orderIndex: setIndex,
+          expectedReps: set.targetRepsMin,
+          targetRepsMin: set.targetRepsMin,
+          targetRepsMax: set.targetRepsMax,
+          targetWeight: set.targetWeight ?? null,
+          targetWeightUnit: set.targetWeightUnit ?? null,
+          targetEffort: set.targetEffort ?? null,
+        };
+        if (set.id)
+          await tx.assignedSet.update({ where: { id: set.id }, data });
+        else
+          await tx.assignedSet.create({
+            data: { ...data, workoutExerciseId: old.id },
+          });
+      }
+    }
+    const scheduledAt = localDateTimeToUtc(
+      input.scheduledAt,
+      client.user.timezone,
+    );
+    const updated = await tx.workout.update({
+      where: { id: workout.id },
+      data: {
+        name: input.name,
+        notes: input.notes || null,
+        durationMinutes: input.durationMinutes ?? workout.durationMinutes,
+        scheduledAt,
+        scheduleTimezone: client.user.timezone,
+      },
+    });
+    await writeAudit(tx, {
+      actorUserId: actor.id,
+      actorRole: actor.role,
+      action: "WORKOUT_UPDATED",
+      entityType: "WORKOUT",
+      entityId: workout.id,
+      oldValue: {
+        name: workout.name,
+        scheduledAt: workout.scheduledAt.toISOString(),
+      },
+      newValue: {
+        name: updated.name,
+        scheduledAt: updated.scheduledAt.toISOString(),
+        clientId: client.id,
+      },
+    });
+    return updated;
+  });
+}
+
+export async function updateMeal(actor: Actor, rawInput: unknown) {
+  const coachId = requireCoachProfileId(actor);
+  const input = updateMealSchema.parse(rawInput);
+  return db.$transaction(async (tx) => {
+    const client = await requireAccessibleClient(tx, actor, input.clientId);
+    const meal = await tx.mealEvent.findFirst({
+      where: { id: input.mealId, clientId: client.id, coachId },
+    });
+    if (!meal) throw new AuthorizationError();
+    const scheduledAt = localDateTimeToUtc(
+      input.scheduledAt,
+      client.user.timezone,
+    );
+    await tx.mealIngredient.deleteMany({ where: { mealId: meal.id } });
+    await tx.mealIngredient.createMany({
+      data: input.ingredients.map((ingredient, orderIndex) => ({
+        mealId: meal.id,
+        name: ingredient.name,
+        amount: ingredient.amount ?? "",
+        orderIndex,
+      })),
+    });
+    const updated = await tx.mealEvent.update({
+      where: { id: meal.id },
+      data: {
+        name: input.name,
+        description: input.description || null,
+        expectedCalories: input.expectedCalories ?? null,
+        expectedProteinGrams: input.expectedProteinGrams ?? null,
+        expectedCarbGrams: input.expectedCarbGrams ?? null,
+        expectedFatGrams: input.expectedFatGrams ?? null,
+        scheduledAt,
+        scheduleTimezone: client.user.timezone,
+      },
+    });
+    await writeAudit(tx, {
+      actorUserId: actor.id,
+      actorRole: actor.role,
+      action: "MEAL_UPDATED",
+      entityType: "MEAL_EVENT",
+      entityId: meal.id,
+      oldValue: {
+        name: meal.name,
+        scheduledAt: meal.scheduledAt.toISOString(),
+      },
+      newValue: {
+        name: updated.name,
+        scheduledAt: updated.scheduledAt.toISOString(),
+        clientId: client.id,
+      },
+    });
+    return updated;
+  });
+}
+
+export async function updateSupplement(actor: Actor, rawInput: unknown) {
+  const coachId = requireCoachProfileId(actor);
+  const input = updateSupplementSchema.parse(rawInput);
+  return db.$transaction(async (tx) => {
+    const client = await requireAccessibleClient(tx, actor, input.clientId);
+    const supplement = await tx.supplementEvent.findFirst({
+      where: { id: input.supplementId, clientId: client.id, coachId },
+    });
+    if (!supplement) throw new AuthorizationError();
+    const scheduledAt = localDateTimeToUtc(
+      input.scheduledAt,
+      client.user.timezone,
+    );
+    const updated = await tx.supplementEvent.update({
+      where: { id: supplement.id },
+      data: {
+        name: input.name,
+        dosageText: input.dosageText,
+        coachNotes: input.coachNotes || null,
+        scheduledAt,
+        scheduleTimezone: client.user.timezone,
+      },
+    });
+    await writeAudit(tx, {
+      actorUserId: actor.id,
+      actorRole: actor.role,
+      action: "SUPPLEMENT_UPDATED",
+      entityType: "SUPPLEMENT_EVENT",
+      entityId: supplement.id,
+      oldValue: {
+        name: supplement.name,
+        scheduledAt: supplement.scheduledAt.toISOString(),
+      },
+      newValue: {
+        name: updated.name,
+        scheduledAt: updated.scheduledAt.toISOString(),
+        clientId: client.id,
+      },
+    });
+    return updated;
   });
 }
 

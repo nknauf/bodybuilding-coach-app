@@ -33,7 +33,7 @@ export async function getClientCalendarMonth(
     start: localDateUtcRange(first, client.user.timezone).start,
     end: localDateUtcRange(nextMonth, client.user.timezone).start,
   };
-  const [workouts, meals, media] = await Promise.all([
+  const [workouts, meals, supplements, media] = await Promise.all([
     db.workout.findMany({
       where: {
         clientId: client.id,
@@ -42,6 +42,13 @@ export async function getClientCalendarMonth(
       select: { scheduledAt: true },
     }),
     db.mealEvent.findMany({
+      where: {
+        clientId: client.id,
+        scheduledAt: { gte: range.start, lt: range.end },
+      },
+      select: { scheduledAt: true },
+    }),
+    db.supplementEvent.findMany({
       where: {
         clientId: client.id,
         scheduledAt: { gte: range.start, lt: range.end },
@@ -66,16 +73,24 @@ export async function getClientCalendarMonth(
   ]);
   const days: Record<
     string,
-    { workouts: number; meals: number; media: number }
+    { workouts: number; meals: number; supplements: number; media: number }
   > = {};
-  const increment = (day: string, kind: "workouts" | "meals" | "media") => {
-    days[day] ??= { workouts: 0, meals: 0, media: 0 };
+  const increment = (
+    day: string,
+    kind: "workouts" | "meals" | "supplements" | "media",
+  ) => {
+    days[day] ??= { workouts: 0, meals: 0, supplements: 0, media: 0 };
     days[day][kind]++;
   };
   for (const item of workouts)
     increment(localDayKey(item.scheduledAt, client.user.timezone), "workouts");
   for (const item of meals)
     increment(localDayKey(item.scheduledAt, client.user.timezone), "meals");
+  for (const item of supplements)
+    increment(
+      localDayKey(item.scheduledAt, client.user.timezone),
+      "supplements",
+    );
   for (const item of media)
     increment(
       item.mediaDate
@@ -89,7 +104,7 @@ export async function getClientCalendarMonth(
 export async function getClientDayDetails(actor: Actor, day: string) {
   const client = await requireAccessibleClient(db, actor);
   const range = localDateUtcRange(day, client.user.timezone);
-  const [workouts, meals] = await Promise.all([
+  const [workouts, meals, supplements] = await Promise.all([
     db.workout.findMany({
       where: {
         clientId: client.id,
@@ -118,6 +133,21 @@ export async function getClientDayDetails(actor: Actor, day: string) {
       },
       orderBy: { scheduledAt: "asc" },
     }),
+    db.supplementEvent.findMany({
+      where: {
+        clientId: client.id,
+        scheduledAt: { gte: range.start, lt: range.end },
+      },
+      select: {
+        id: true,
+        name: true,
+        dosageText: true,
+        scheduledAt: true,
+        completedAt: true,
+        coachNotes: true,
+      },
+      orderBy: { scheduledAt: "asc" },
+    }),
   ]);
   const now = new Date();
   return {
@@ -134,6 +164,15 @@ export async function getClientDayDetails(actor: Actor, day: string) {
       ...item,
       status: effectiveEventStatus({
         kind: "meal",
+        scheduledAt: item.scheduledAt,
+        completedAt: item.completedAt,
+        now,
+      }),
+    })),
+    supplements: supplements.map((item) => ({
+      ...item,
+      status: effectiveEventStatus({
+        kind: "supplement",
         scheduledAt: item.scheduledAt,
         completedAt: item.completedAt,
         now,
