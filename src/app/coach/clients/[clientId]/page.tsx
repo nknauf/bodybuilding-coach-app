@@ -9,6 +9,7 @@ import {
 } from "@/app/actions/coach";
 import { CoachClientWorkspace } from "@/components/coach-client-workspace";
 import { WeightChart } from "@/components/weight-chart";
+import { ClientMedia } from "@/components/client-media";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AuthorizationError } from "@/server/auth/errors";
 import { requireActor } from "@/server/auth/current-user";
@@ -254,6 +255,7 @@ export default async function CoachClientPage({
           </CardContent>
         </Card>
       </section>
+      <ClientMedia clientId={clientId} />
     </div>
   );
 }

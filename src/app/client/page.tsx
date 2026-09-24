@@ -17,6 +17,8 @@ import {
 import { MutationForm } from "@/components/mutation-form";
 import { StatusBadge } from "@/components/status-badge";
 import { WeightChart } from "@/components/weight-chart";
+import { ClientMedia } from "@/components/client-media";
+import { ClientCalendar } from "@/components/client-calendar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -25,10 +27,24 @@ import { Label } from "@/components/ui/label";
 export default async function ClientPage({
   searchParams,
 }: {
-  searchParams: Promise<{ period?: string; weight?: string }>;
+  searchParams: Promise<{
+    period?: string;
+    weight?: string;
+    view?: string;
+    month?: string;
+    date?: string;
+  }>;
 }) {
   const actor = await requireActor(["CLIENT"]);
   const query = await searchParams;
+  const view = query.view === "calendar" ? "calendar" : "today";
+  if (view === "calendar")
+    return (
+      <>
+        <WorkspaceTabs view={view} />
+        <ClientCalendar actor={actor} month={query.month} date={query.date} />
+      </>
+    );
   const weightDays = [7, 30, 90, 365].includes(Number(query.weight))
     ? Number(query.weight)
     : 30;
@@ -98,6 +114,12 @@ export default async function ClientPage({
   }
   const todayKey = localDayKey(now, timezone);
   const todayEvents = eventsByDay.get(todayKey) ?? [];
+  const pendingToday = todayEvents.filter(
+    (event) => event.status !== "COMPLETED",
+  );
+  const completedToday = todayEvents.filter(
+    (event) => event.status === "COMPLETED",
+  );
   const chartPoints = report.weightTrend.points.map((point) => ({
     date: formatInTimeZone(point.measuredAt, timezone, "MMM d"),
     value: point.value,
@@ -105,6 +127,7 @@ export default async function ClientPage({
 
   return (
     <div className="space-y-8">
+      <WorkspaceTabs view={view} />
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-muted-foreground text-sm">
@@ -145,7 +168,7 @@ export default async function ClientPage({
           </Card>
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {todayEvents.map((event) => (
+            {pendingToday.map((event) => (
               <EventCard
                 key={`today-${event.kind}-${event.id}`}
                 event={event}
@@ -155,6 +178,25 @@ export default async function ClientPage({
             ))}
           </div>
         )}
+        {todayEvents.length > 0 && pendingToday.length === 0 ? (
+          <p className="text-muted-foreground text-sm">
+            Everything scheduled today is logged.
+          </p>
+        ) : null}
+        {completedToday.length > 0 ? (
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold">Logged today</h3>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {completedToday.map((event) => (
+                <EventCard
+                  key={`completed-${event.kind}-${event.id}`}
+                  event={event}
+                  timezone={timezone}
+                />
+              ))}
+            </div>
+          </div>
+        ) : null}
       </section>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="col-span-full flex flex-wrap gap-2">
@@ -323,7 +365,36 @@ export default async function ClientPage({
           </CardContent>
         </Card>
       </div>
+      <ClientMedia
+        clientId={report.profile.id}
+        timezone={timezone}
+        date={todayKey}
+      />
     </div>
+  );
+}
+
+function WorkspaceTabs({ view }: { view: "today" | "calendar" }) {
+  return (
+    <nav
+      aria-label="Client workspace"
+      className="bg-muted inline-flex rounded-lg p-1"
+    >
+      <Link
+        href="/client?view=today"
+        aria-current={view === "today" ? "page" : undefined}
+        className={`rounded-md px-5 py-2 text-sm font-medium ${view === "today" ? "bg-background shadow-sm" : "text-muted-foreground"}`}
+      >
+        Today
+      </Link>
+      <Link
+        href="/client?view=calendar"
+        aria-current={view === "calendar" ? "page" : undefined}
+        className={`rounded-md px-5 py-2 text-sm font-medium ${view === "calendar" ? "bg-background shadow-sm" : "text-muted-foreground"}`}
+      >
+        Calendar
+      </Link>
+    </nav>
   );
 }
 

@@ -88,6 +88,52 @@ unique constraints, checks, and indexes to reduce ownership mistakes.
 
 ## Prerequisites
 
+## Private media storage
+
+Client and coach workspaces include a small Media section for JPEG, PNG, and
+WebP images (10 MB maximum) and MP4, MOV, and WebM videos (100 MB maximum).
+Captions are optional and limited to 200 characters. The app stores files in
+Cloudflare R2 and metadata in PostgreSQL. R2 objects remain private. The
+browser uploads directly to R2 with a five-minute signed PUT URL bound to the
+selected content type and byte size; the app
+checks the resulting object's size and content type before creating the Media
+row. Failed uploads therefore do not appear as completed media. The app
+authorizes every list, view, and delete request against the current client
+assignment. Viewing uses a fresh ten-minute signed GET URL. Deletion removes
+the object and then the database row; retry is safe when R2 already lacks the
+object. An interrupted upload can leave an unreferenced R2 object; a future
+cleanup task may remove old unreferenced keys.
+
+Set these server-only variables locally and in the Vercel project for each
+deployment environment: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`,
+`R2_SECRET_ACCESS_KEY`, and `R2_BUCKET_NAME`. `R2_PUBLIC_URL` is optional and
+unused for private media. Do not prefix credentials with `NEXT_PUBLIC_`.
+Deploy the additive `20260923120000_media_storage` Prisma migration using
+`npm run db:migrate:deploy` before enabling media in production. Vercel signs
+requests but never proxies the file bytes.
+
+Apply this bucket CORS policy in Cloudflare R2, replacing the example deployed
+origin with the actual Vercel/custom-domain origin. Include any preview origin
+explicitly if preview uploads are needed. The browser sends `PUT` with
+`Content-Type` and may request `GET`/`HEAD` for signed playback, including
+`Range` for video seeking. The app does not need wildcard origins.
+
+```json
+[
+  {
+    "AllowedOrigins": ["http://localhost:3000", "https://your-app.example.com"],
+    "AllowedMethods": ["PUT", "GET", "HEAD"],
+    "AllowedHeaders": ["Content-Type", "Range"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+The repository cannot verify the external bucket, credential permissions,
+applied CORS policy, or Vercel environment values. The owner should confirm
+those in Cloudflare and Vercel, then upload, reload, play, and delete one image
+and one video from both permitted roles.
+
 - Node.js 20.19+, 22.12+, or 24+
 - npm
 - A Neon PostgreSQL project/branch
@@ -112,7 +158,8 @@ unique constraints, checks, and indexes to reduce ownership mistakes.
      `CLERK_WEBHOOK_SECRET` name remains supported.
    - a random `CRON_SECRET` of at least 16 characters to test reconciliation.
 
-   Future R2, Stream, PostHog, and Upstash variables may remain blank.
+   Configure the four private R2 variables below to use media. Stream,
+   PostHog, and Upstash variables may remain blank.
 
 3. Generate Prisma Client and apply the checked-in migrations:
 
@@ -294,7 +341,7 @@ production. Back up the database and review generated SQL before deploy.
   it is not an arbitrary date-picker report.
 - No PostgreSQL RLS is configured. Isolation is application-scoped as described
   above.
-- R2 photos, Stream Chat, PostHog, Upstash Redis, production email delivery,
+- Stream Chat, PostHog, Upstash Redis, production email delivery,
   admin impersonation, exports, advanced analytics, recurrence editing,
   background-job infrastructure, drag-and-drop, and advanced exercise analytics
   are deferred. Their environment variables are inert.
