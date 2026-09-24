@@ -13,7 +13,7 @@ export default async function ClientLayout({
       role="Client"
       navigation={[
         { href: "/client", label: "Today" },
-        { href: "/client#calendar", label: "Calendar" },
+        { href: "/client?view=calendar", label: "Calendar" },
         { href: "/client#progress", label: "Progress" },
       ]}
     >

@@ -29,3 +29,21 @@ export function localDateTimeToUtc(value: string, timezone: string): Date {
 export function startOfLocalDayUtc(instant: Date, timezone: string): Date {
   return fromZonedTime(startOfDay(toZonedTime(instant, timezone)), timezone);
 }
+
+export function localDateUtcRange(day: string, timezone: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new Error("Invalid date.");
+  const date = new Date(`${day}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== day)
+    throw new Error("Invalid date.");
+  const next = new Date(date);
+  next.setUTCDate(next.getUTCDate() + 1);
+  return {
+    start: fromZonedTime(`${day}T00:00:00`, timezone),
+    end: fromZonedTime(`${next.toISOString().slice(0, 10)}T00:00:00`, timezone),
+  };
+}
+
+export function dateOnlyValue(day: string): Date {
+  localDateUtcRange(day, "UTC");
+  return new Date(`${day}T00:00:00.000Z`);
+}
