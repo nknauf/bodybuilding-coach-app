@@ -10,6 +10,9 @@ import {
   scheduleSupplement,
   scheduleWorkout,
   setClientStatus,
+  updateMeal,
+  updateSupplement,
+  updateWorkout,
 } from "@/server/services/coach";
 import type { ActionState } from "./state";
 import { actionError } from "./state";
@@ -159,6 +162,71 @@ export async function scheduleSupplementAction(
     });
     revalidatePath(`/coach/clients/${clientId}`);
     return { ok: true, message: "Supplement scheduled." };
+  } catch (error) {
+    return actionError(error);
+  }
+}
+
+export async function updateWorkoutAction(
+  clientId: string,
+  workoutId: string,
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  try {
+    const actor = await requireActor(["COACH"]);
+    const payload = JSON.parse(
+      String(formData.get("payload") ?? "{}"),
+    ) as object;
+    await updateWorkout(actor, { ...payload, clientId, workoutId });
+    revalidatePath(`/coach/clients/${clientId}`);
+    revalidatePath("/coach");
+    revalidatePath("/client");
+    revalidatePath(`/client/workouts/${workoutId}`);
+    return { ok: true, message: "Workout updated." };
+  } catch (error) {
+    return actionError(error);
+  }
+}
+
+export async function updateMealAction(
+  clientId: string,
+  mealId: string,
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  try {
+    const actor = await requireActor(["COACH"]);
+    const payload = JSON.parse(
+      String(formData.get("payload") ?? "{}"),
+    ) as object;
+    await updateMeal(actor, { ...payload, clientId, mealId });
+    revalidatePath(`/coach/clients/${clientId}`);
+    revalidatePath("/coach");
+    revalidatePath("/client");
+    return { ok: true, message: "Meal updated." };
+  } catch (error) {
+    return actionError(error);
+  }
+}
+
+export async function updateSupplementAction(
+  clientId: string,
+  supplementId: string,
+  _state: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  try {
+    const actor = await requireActor(["COACH"]);
+    await updateSupplement(actor, {
+      ...Object.fromEntries(formData),
+      clientId,
+      supplementId,
+    });
+    revalidatePath(`/coach/clients/${clientId}`);
+    revalidatePath("/coach");
+    revalidatePath("/client");
+    return { ok: true, message: "Supplement updated." };
   } catch (error) {
     return actionError(error);
   }

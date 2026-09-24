@@ -24,7 +24,9 @@ export async function logAssignedSet(actor: Actor, rawInput: unknown) {
     const assigned = await tx.assignedSet.findFirst({
       where: {
         id: input.assignedSetId,
+        archivedAt: null,
         workoutExercise: {
+          archivedAt: null,
           workout: {
             id: input.workoutId,
             clientId,
@@ -78,6 +80,7 @@ export async function logExtraSet(actor: Actor, rawInput: unknown) {
   return db.$transaction(async (tx) => {
     const item = await tx.workoutExercise.findFirst({
       where: {
+        archivedAt: null,
         id: input.workoutExerciseId,
         workout: {
           id: input.workoutId,
@@ -274,9 +277,11 @@ export async function getClientWorkout(actor: Actor, rawWorkoutId: unknown) {
     },
     include: {
       exercises: {
+        where: { archivedAt: null },
         orderBy: { orderIndex: "asc" },
         include: {
           assignedSets: {
+            where: { archivedAt: null },
             orderBy: { orderIndex: "asc" },
             include: { log: true },
           },
@@ -289,6 +294,17 @@ export async function getClientWorkout(actor: Actor, rawWorkoutId: unknown) {
     },
   });
   if (!workout) throw new AuthorizationError();
+  const archivedLogs = await db.workoutSetLog.findMany({
+    where: {
+      workoutId,
+      OR: [
+        { workoutExercise: { archivedAt: { not: null } } },
+        { assignedSet: { archivedAt: { not: null } } },
+      ],
+    },
+    include: { workoutExercise: true },
+    orderBy: { loggedAt: "asc" },
+  });
   const previousLogs = await db.workoutSetLog.findMany({
     where: {
       clientId,
@@ -307,7 +323,7 @@ export async function getClientWorkout(actor: Actor, rawWorkoutId: unknown) {
     orderBy: { loggedAt: "desc" },
     take: 60,
   });
-  return { ...workout, previousLogs };
+  return { ...workout, previousLogs, archivedLogs };
 }
 
 export async function rescheduleEvent(actor: Actor, rawInput: unknown) {

@@ -114,7 +114,7 @@ export async function ClientCalendar({
                   <Link
                     key={day}
                     href={`/client?view=calendar&month=${requestedMonth}&date=${day}`}
-                    aria-label={`${day}${activity ? `, ${activity.workouts} workouts, ${activity.meals} meals, ${activity.media} media` : ""}`}
+                    aria-label={`${day}${activity ? `, ${activity.workouts} workouts, ${activity.meals} meals, ${activity.supplements} supplements, ${activity.media} media` : ""}`}
                     aria-current={day === selected ? "date" : undefined}
                     className={`hover:bg-accent min-h-14 rounded-lg border p-1 text-center text-sm transition-colors sm:min-h-16 ${day === selected ? "border-primary bg-primary/10 font-semibold" : day === today ? "border-primary/60" : "border-transparent"}`}
                   >
@@ -135,6 +135,9 @@ export async function ClientCalendar({
                         {activity.meals ? (
                           <span className="size-1.5 rounded-full bg-emerald-500" />
                         ) : null}
+                        {activity.supplements ? (
+                          <span className="size-1.5 rounded-full bg-amber-500" />
+                        ) : null}
                         {activity.media ? (
                           <span className="size-1.5 rounded-full bg-violet-500" />
                         ) : null}
@@ -145,7 +148,7 @@ export async function ClientCalendar({
               })}
             </div>
             <p className="text-muted-foreground mt-3 text-xs">
-              Blue: workout · Green: meal · Purple: media
+              Blue: workout · Green: meal · Amber: supplement · Purple: media
             </p>
           </CardContent>
         </Card>
@@ -164,6 +167,7 @@ export async function ClientCalendar({
           </div>
           {!details.workouts.length &&
           !details.meals.length &&
+          !details.supplements.length &&
           !days[selected]?.media ? (
             <p className="text-muted-foreground text-sm">
               Nothing logged for this day yet.
@@ -238,6 +242,38 @@ export async function ClientCalendar({
               ) : (
                 <p className="text-muted-foreground text-sm">
                   No meals scheduled.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Supplements</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {details.supplements.length ? (
+                details.supplements.map((item) => (
+                  <div key={item.id} className="rounded-lg border p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-medium">{item.name}</span>
+                      <StatusBadge status={item.status} />
+                    </div>
+                    <p className="text-muted-foreground text-xs">
+                      {formatInTimeZone(
+                        item.scheduledAt,
+                        client.user.timezone,
+                        "p",
+                      )}{" "}
+                      · {item.dosageText}
+                    </p>
+                    {item.coachNotes ? (
+                      <p className="mt-1 text-sm">{item.coachNotes}</p>
+                    ) : null}
+                  </div>
+                ))
+              ) : (
+                <p className="text-muted-foreground text-sm">
+                  No supplements scheduled.
                 </p>
               )}
             </CardContent>

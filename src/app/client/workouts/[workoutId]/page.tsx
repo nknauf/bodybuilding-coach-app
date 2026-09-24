@@ -79,6 +79,23 @@ export default async function WorkoutPage({
             })),
         }))}
       />
+      {workout.archivedLogs.length ? (
+        <section className="rounded-lg border p-4">
+          <h2 className="font-semibold">Earlier logged sets</h2>
+          <ul className="mt-2 space-y-1 text-sm">
+            {workout.archivedLogs.map((log) => (
+              <li key={log.id}>
+                {log.workoutExercise.exerciseNameSnapshot}:{" "}
+                {log.status.toLowerCase()}
+                {log.actualReps !== null ? `, ${log.actualReps} reps` : ""}
+                {log.actualWeight !== null
+                  ? ` at ${log.actualWeight} ${log.weightUnit ?? ""}`
+                  : ""}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
       {!workout.finalizedAt ? (
         <ConfirmForm
           action={finalizeWorkoutAction.bind(null, workout.id)}

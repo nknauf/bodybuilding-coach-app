@@ -6,6 +6,9 @@ import {
   scheduleMealAction,
   scheduleSupplementAction,
   scheduleWorkoutAction,
+  updateMealAction,
+  updateSupplementAction,
+  updateWorkoutAction,
 } from "@/app/actions/coach";
 import { CoachClientWorkspace } from "@/components/coach-client-workspace";
 import { WeightChart } from "@/components/weight-chart";
@@ -78,6 +81,26 @@ export default async function CoachClientPage({
       status: x.effectiveStatus,
       detail: `${x.exercises.length} exercises`,
       exerciseCount: x.exercises.length,
+      updateAction: updateWorkoutAction.bind(null, clientId, x.id),
+      workout: {
+        name: x.name,
+        scheduledAt: local(x.scheduledAt),
+        notes: x.notes ?? "",
+        exercises: x.exercises.map((exercise) => ({
+          id: exercise.id,
+          exerciseId: exercise.exerciseId,
+          exerciseName: exercise.exerciseNameSnapshot,
+          notes: exercise.coachNotes ?? "",
+          sets: exercise.assignedSets.map((set) => ({
+            id: set.id,
+            repsMin: String(set.targetRepsMin ?? set.expectedReps),
+            repsMax: String(set.targetRepsMax ?? set.expectedReps),
+            weight: set.targetWeight?.toString() ?? "",
+            unit: set.targetWeightUnit ?? "LB",
+            effort: set.targetEffort?.toString() ?? "",
+          })),
+        })),
+      },
     })),
     ...report.meals.map((x) => ({
       id: x.id,
@@ -88,6 +111,20 @@ export default async function CoachClientPage({
       detail: x.expectedCalories
         ? `${x.expectedCalories} kcal`
         : "Assigned meal",
+      updateAction: updateMealAction.bind(null, clientId, x.id),
+      meal: {
+        name: x.name,
+        scheduledAt: local(x.scheduledAt),
+        description: x.description ?? "",
+        expectedCalories: x.expectedCalories?.toString() ?? "",
+        expectedProteinGrams: x.expectedProteinGrams?.toString() ?? "",
+        expectedCarbGrams: x.expectedCarbGrams?.toString() ?? "",
+        expectedFatGrams: x.expectedFatGrams?.toString() ?? "",
+        ingredients: x.ingredients.map((item) => ({
+          name: item.name,
+          amount: item.amount,
+        })),
+      },
     })),
     ...report.supplements.map((x) => ({
       id: x.id,
@@ -96,6 +133,13 @@ export default async function CoachClientPage({
       at: local(x.scheduledAt),
       status: x.effectiveStatus,
       detail: x.dosageText,
+      updateAction: updateSupplementAction.bind(null, clientId, x.id),
+      supplement: {
+        name: x.name,
+        scheduledAt: local(x.scheduledAt),
+        dosageText: x.dosageText,
+        coachNotes: x.coachNotes ?? "",
+      },
     })),
   ];
   const days = eachDayOfInterval({

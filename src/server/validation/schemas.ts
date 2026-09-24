@@ -59,6 +59,7 @@ export const workoutSchema = scheduledBase.extend({
   exercises: z
     .array(
       z.object({
+        id: uuidSchema.optional(),
         exerciseId: uuidSchema,
         notes: z.string().trim().max(1000).optional(),
         expectedReps: z
@@ -70,6 +71,7 @@ export const workoutSchema = scheduledBase.extend({
           .array(
             z
               .object({
+                id: uuidSchema.optional(),
                 targetRepsMin: z.number().int().min(1).max(1000),
                 targetRepsMax: z.number().int().min(1).max(1000),
                 targetWeight: z.number().min(0).max(10000).optional(),
@@ -92,6 +94,7 @@ export const workoutSchema = scheduledBase.extend({
         const sets =
           exercise.sets ??
           exercise.expectedReps?.map((reps) => ({
+            id: undefined,
             targetRepsMin: reps,
             targetRepsMax: reps,
             targetWeight: undefined,
@@ -106,6 +109,10 @@ export const workoutSchema = scheduledBase.extend({
         return { ...exercise, sets: sets ?? [] };
       }),
     ),
+});
+
+export const updateWorkoutSchema = workoutSchema.extend({
+  workoutId: uuidSchema,
 });
 
 export const mealSchema = scheduledBase.extend({
@@ -128,10 +135,16 @@ export const mealSchema = scheduledBase.extend({
     .default([]),
 });
 
+export const updateMealSchema = mealSchema.extend({ mealId: uuidSchema });
+
 export const supplementSchema = scheduledBase.extend({
   name: boundedText(120),
   dosageText: boundedText(200),
   coachNotes: z.string().trim().max(1000).optional(),
+});
+
+export const updateSupplementSchema = supplementSchema.extend({
+  supplementId: uuidSchema,
 });
 
 export const clientStatusSchema = z.enum(["ACTIVE", "INACTIVE", "ARCHIVED"]);

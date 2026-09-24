@@ -3,7 +3,12 @@
 import { useCallback, useState } from "react";
 import { CalendarPlus, Dumbbell, Plus, Salad, Sparkles } from "lucide-react";
 import type { ActionState } from "@/app/actions/state";
-import { WorkoutBuilder, MealBuilder } from "@/components/coach-schedule-forms";
+import {
+  WorkoutBuilder,
+  MealBuilder,
+  type WorkoutValues,
+  type MealValues,
+} from "@/components/coach-schedule-forms";
 import { MutationForm } from "@/components/mutation-form";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
@@ -36,6 +41,15 @@ type Event = {
   status: string;
   detail?: string;
   exerciseCount?: number;
+  workout?: WorkoutValues;
+  meal?: MealValues;
+  supplement?: {
+    name: string;
+    dosageText: string;
+    scheduledAt: string;
+    coachNotes: string;
+  };
+  updateAction: Action;
 };
 
 export function CoachClientWorkspace({
@@ -69,10 +83,7 @@ export function CoachClientWorkspace({
     setDrawer({ kind, date });
   };
   const defaultAt = drawer?.date ? `${drawer.date}T12:00` : "";
-  const creationKind =
-    editing && (drawer?.kind === "workout" || !drawer?.event)
-      ? drawer?.kind
-      : null;
+  const creationKind = editing && !drawer?.event ? drawer?.kind : null;
   const closeCreation = useCallback(() => {
     if (
       creationDirty &&
@@ -89,6 +100,17 @@ export function CoachClientWorkspace({
     setEditing(false);
     setCreationDirty(false);
   }, []);
+  const closeEdit = () => {
+    if (
+      creationDirty &&
+      drawer?.event &&
+      !window.confirm(`Discard this unsaved ${drawer.kind}?`)
+    )
+      return;
+    setDrawer(null);
+    setEditing(false);
+    setCreationDirty(false);
+  };
   return (
     <>
       <section aria-labelledby="weekly-plan" className="space-y-3">
@@ -131,6 +153,7 @@ export function CoachClientWorkspace({
                         key={`${event.kind}-${event.id}`}
                         onClick={() => {
                           setEditing(false);
+                          setCreationDirty(false);
                           setDrawer({ kind: event.kind, event });
                         }}
                         className={`w-full rounded-md border px-2 py-2 text-left text-xs ${event.kind === "workout" ? "border-blue-200 bg-blue-50" : event.kind === "meal" ? "border-emerald-200 bg-emerald-50" : "border-violet-200 bg-violet-50"}`}
@@ -246,8 +269,7 @@ export function CoachClientWorkspace({
         open={Boolean(drawer) && !creationKind}
         onOpenChange={(open) => {
           if (!open) {
-            setDrawer(null);
-            setEditing(false);
+            closeEdit();
           }
         }}
       >
@@ -282,22 +304,59 @@ export function CoachClientWorkspace({
                     <StatusBadge status={drawer.event.status} />
                   </div>
                 </div>
-                <Button onClick={() => setEditing(true)}>Edit</Button>
+                <Button
+                  onClick={() => {
+                    setCreationDirty(false);
+                    setEditing(true);
+                  }}
+                >
+                  Edit
+                </Button>
                 <p className="text-muted-foreground text-xs">
                   Existing safe rescheduling rules remain enforced. Editing
                   scheduled content is intentionally separate from viewing.
                 </p>
               </div>
-            ) : drawer?.kind === "meal" ? (
+            ) : drawer?.kind === "workout" && drawer.event?.workout ? (
+              <WorkoutBuilder
+                key={drawer.event.id}
+                mode="edit"
+                action={drawer.event.updateAction}
+                createExerciseAction={actions.exercise}
+                exercises={exercises}
+                initialValues={drawer.event.workout}
+                onDirtyChange={setCreationDirty}
+                onCreated={creationSaved}
+              />
+            ) : drawer?.kind === "meal" && drawer.event?.meal ? (
               <MealBuilder
-                action={actions.meal}
-                defaultScheduledAt={defaultAt}
+                key={drawer.event.id}
+                mode="edit"
+                action={drawer.event.updateAction}
+                initialValues={drawer.event.meal}
+                onDirtyChange={setCreationDirty}
+                onCreated={creationSaved}
               />
-            ) : drawer?.kind === "supplement" ? (
+            ) : drawer?.kind === "supplement" && drawer.event?.supplement ? (
               <SupplementForm
-                action={actions.supplement}
-                defaultScheduledAt={defaultAt}
+                key={drawer.event.id}
+                mode="edit"
+                action={drawer.event.updateAction}
+                defaultScheduledAt={drawer.event.supplement.scheduledAt}
+                initialValues={drawer.event.supplement}
+                onDirtyChange={setCreationDirty}
+                onCreated={creationSaved}
               />
+            ) : null}
+            {drawer?.event && editing ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="mt-4"
+                onClick={closeEdit}
+              >
+                Cancel
+              </Button>
             ) : null}
           </div>
         </SheetContent>
@@ -308,11 +367,20 @@ export function CoachClientWorkspace({
 
 function SupplementForm({
   action,
+  mode = "create",
+  initialValues,
   defaultScheduledAt,
   onDirtyChange,
   onCreated,
 }: {
   action: Action;
+  mode?: "create" | "edit";
+  initialValues?: {
+    name: string;
+    dosageText: string;
+    scheduledAt: string;
+    coachNotes: string;
+  };
   defaultScheduledAt: string;
   onDirtyChange?: (dirty: boolean) => void;
   onCreated?: () => void;
@@ -320,20 +388,27 @@ function SupplementForm({
   return (
     <MutationForm
       action={action}
-      submitLabel="Schedule supplement"
+      submitLabel={mode === "edit" ? "Save supplement" : "Schedule supplement"}
       className="space-y-4"
       onDirtyChange={onDirtyChange}
       onSuccess={onCreated}
     >
       <div className="space-y-1.5">
         <Label htmlFor="supplement-name">Supplement name</Label>
-        <Input id="supplement-name" name="name" maxLength={120} required />
+        <Input
+          id="supplement-name"
+          name="name"
+          defaultValue={initialValues?.name}
+          maxLength={120}
+          required
+        />
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="supplement-dosage">Assigned dosage</Label>
         <Input
           id="supplement-dosage"
           name="dosageText"
+          defaultValue={initialValues?.dosageText}
           maxLength={200}
           required
         />
@@ -346,13 +421,18 @@ function SupplementForm({
           id="supplement-scheduled-at"
           name="scheduledAt"
           type="datetime-local"
-          defaultValue={defaultScheduledAt}
+          defaultValue={initialValues?.scheduledAt ?? defaultScheduledAt}
           required
         />
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="supplement-notes">Coach notes</Label>
-        <Textarea id="supplement-notes" name="coachNotes" maxLength={1000} />
+        <Textarea
+          id="supplement-notes"
+          name="coachNotes"
+          defaultValue={initialValues?.coachNotes}
+          maxLength={1000}
+        />
       </div>
     </MutationForm>
   );
