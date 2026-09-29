@@ -4,6 +4,7 @@ import { useActionState, useEffect, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 import type { ActionState } from "@/app/actions/state";
 import { initialActionState } from "@/app/actions/state";
+import { BuilderFooter } from "@/components/builder-ui";
 import { Button } from "@/components/ui/button";
 
 function SubmitButton({ label }: { label: string }) {
@@ -23,6 +24,8 @@ export function MutationForm({
   confirmMessage,
   onDirtyChange,
   onSuccess,
+  builderLayout = false,
+  onCancel,
 }: {
   action: (state: ActionState, formData: FormData) => Promise<ActionState>;
   submitLabel: string;
@@ -31,6 +34,8 @@ export function MutationForm({
   confirmMessage?: string;
   onDirtyChange?: (dirty: boolean) => void;
   onSuccess?: () => void;
+  builderLayout?: boolean;
+  onCancel?: () => void;
 }) {
   const [state, dispatch] = useActionState(action, initialActionState);
   useEffect(() => {
@@ -47,20 +52,40 @@ export function MutationForm({
       }}
     >
       {children}
-      <div className="flex items-center gap-3">
-        <SubmitButton label={submitLabel} />
-        {state.message ? (
-          <p
-            className={
-              state.ok ? "text-sm text-emerald-700" : "text-destructive text-sm"
-            }
-            role={state.ok ? "status" : "alert"}
-            aria-live="polite"
-          >
-            {state.message}
-          </p>
-        ) : null}
-      </div>
+      {builderLayout ? (
+        <BuilderFooter onCancel={onCancel}>
+          <SubmitButton label={submitLabel} />
+          {state.message && (
+            <p
+              className={
+                state.ok
+                  ? "text-sm text-emerald-700"
+                  : "text-destructive text-sm"
+              }
+              role={state.ok ? "status" : "alert"}
+            >
+              {state.message}
+            </p>
+          )}
+        </BuilderFooter>
+      ) : (
+        <div className="flex items-center gap-3">
+          <SubmitButton label={submitLabel} />
+          {state.message ? (
+            <p
+              className={
+                state.ok
+                  ? "text-sm text-emerald-700"
+                  : "text-destructive text-sm"
+              }
+              role={state.ok ? "status" : "alert"}
+              aria-live="polite"
+            >
+              {state.message}
+            </p>
+          ) : null}
+        </div>
+      )}
       {state.inviteUrl ? (
         <div className="bg-muted/40 rounded-lg border p-3">
           <label className="text-sm font-medium" htmlFor="invitation-link">
