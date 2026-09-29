@@ -7,9 +7,19 @@ import {
   Plus,
   Salad,
   Sparkles,
-  Trash2,
+  ChevronDown,
 } from "lucide-react";
-import { useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
+import {
+  BuilderFooter,
+  ScheduleControls,
+  ItemMenu,
+  SortHandle,
+  PresetMenu,
+  builderFormClass,
+  builderBodyClass,
+} from "@/components/builder-ui";
+import { rankExercises } from "@/lib/exercise-search";
 import { useDemo } from "@/demo/demo-provider";
 import type {
   DemoMeal,
@@ -22,12 +32,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 type Kind = "workout" | "meal" | "supplement";
 type DemoExerciseDraftState = {
@@ -220,20 +230,24 @@ export function CoachClientDemo({ clientId }: { clientId: string }) {
           </CardContent>
         </Card>
       </section>
-      <Sheet
+      <Dialog
         open={Boolean(drawer)}
         onOpenChange={(open) => !open && setDrawer(null)}
       >
-        <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
-          <SheetHeader>
-            <SheetTitle>Add {drawer?.kind}</SheetTitle>
-            <SheetDescription>
+        <DialogContent
+          showCloseButton={false}
+          className={`flex max-h-[90dvh] w-[calc(100vw-2rem)] flex-col gap-0 overflow-hidden p-0 ${drawer?.kind === "supplement" ? "sm:max-w-[520px]" : "sm:max-w-[760px]"}`}
+        >
+          <DialogHeader className="shrink-0 border-b px-5 py-4">
+            <DialogTitle>Create {drawer?.kind}</DialogTitle>
+            <DialogDescription>
               This updates only the fictional demo session.
-            </SheetDescription>
-          </SheetHeader>
-          <div className="px-4 pb-8">
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex min-h-0 flex-1 flex-col">
             {drawer?.kind === "workout" ? (
               <WorkoutForm
+                onCancel={() => setDrawer(null)}
                 date={drawer.date}
                 clientId={client.id}
                 onSave={(workout) => {
@@ -262,6 +276,7 @@ export function CoachClientDemo({ clientId }: { clientId: string }) {
               />
             ) : drawer?.kind === "meal" ? (
               <MealForm
+                onCancel={() => setDrawer(null)}
                 date={drawer.date}
                 clientId={client.id}
                 save={(meal) => {
@@ -271,6 +286,7 @@ export function CoachClientDemo({ clientId }: { clientId: string }) {
               />
             ) : drawer?.kind === "supplement" ? (
               <SupplementForm
+                onCancel={() => setDrawer(null)}
                 date={drawer.date}
                 clientId={client.id}
                 save={(supplement) => {
@@ -280,8 +296,8 @@ export function CoachClientDemo({ clientId }: { clientId: string }) {
               />
             ) : null}
           </div>
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -326,12 +342,14 @@ function defaultDate(date?: string) {
 
 function WorkoutForm({
   date,
+  onCancel,
   clientId,
   exercises,
   onCreateExercise,
   onSave,
 }: {
   date?: string;
+  onCancel: () => void;
   clientId: string;
   exercises: { id: string; name: string }[];
   onCreateExercise: (name: string) => { id: string; name: string };
@@ -339,18 +357,50 @@ function WorkoutForm({
 }) {
   const makeDraft = (): DemoExerciseDraftState => ({
     key: crypto.randomUUID(),
-    exerciseId: exercises[0]?.id ?? "",
+    exerciseId: "",
     count: 3,
     reps: 8,
     search: "",
     creating: false,
   });
-  const [draftExercises, setDraftExercises] = useState([makeDraft()]);
+  const [draftExercises, setDraftExercises] = useState<
+    DemoExerciseDraftState[]
+  >([]);
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [recentIds, setRecentIds] = useState<string[]>([]);
+  const [error, setError] = useState("");
+  const move = (from: number, to: number) =>
+    setDraftExercises((current) => {
+      const next = [...current];
+      const [item] = next.splice(from, 1);
+      next.splice(to, 0, item);
+      return next;
+    });
   const updateDraft = (key: string, update: Partial<DemoExerciseDraftState>) =>
     setDraftExercises((current) =>
       current.map((item) => (item.key === key ? { ...item, ...update } : item)),
     );
   function submit(formData: FormData) {
+    if (!draftExercises.length) {
+      setError("Add at least one exercise.");
+      return;
+    }
+    const invalid = draftExercises.find(
+      (draft) =>
+        !exercises.some((exercise) => exercise.id === draft.exerciseId) ||
+        !Number.isInteger(draft.count) ||
+        draft.count < 1 ||
+        draft.count > 10 ||
+        !Number.isInteger(draft.reps) ||
+        draft.reps < 1 ||
+        draft.reps > 100,
+    );
+
+    if (invalid) {
+      setExpanded(invalid.key);
+      setError("Select an exercise and enter valid sets and reps.");
+      return;
+    }
     const workoutId = crypto.randomUUID();
     const assigned: DemoWorkoutExercise[] = draftExercises.map((draft) => {
       const selected =
@@ -378,55 +428,100 @@ function WorkoutForm({
     });
   }
   return (
-    <form action={submit} className="space-y-4">
-      <label className="block text-sm font-medium">
-        Workout name
-        <Input name="name" required placeholder="Push B" className="mt-1" />
-      </label>
-      <label className="block text-sm font-medium">
-        Date and time
-        <Input
-          name="scheduledAt"
-          type="datetime-local"
-          required
-          defaultValue={defaultDate(date)}
-          className="mt-1"
-        />
-      </label>
-      <div className="space-y-3">
-        {draftExercises.map((draft, index) => (
-          <DemoExerciseDraft
-            key={draft.key}
-            draft={draft}
-            index={index}
-            exercises={exercises}
-            canRemove={draftExercises.length > 1}
-            update={(update) => updateDraft(draft.key, update)}
-            remove={() =>
-              setDraftExercises((current) =>
-                current.filter((item) => item.key !== draft.key),
-              )
-            }
-            createExercise={onCreateExercise}
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        submit(new FormData(event.currentTarget));
+      }}
+      className={builderFormClass}
+    >
+      <div className={builderBodyClass} data-builder-scroll>
+        {error && (
+          <p role="alert" className="text-destructive text-sm">
+            {error}
+          </p>
+        )}
+        <h3 className="text-sm font-semibold">Workout information</h3>
+        <label className="block text-sm font-medium">
+          Workout name
+          <Input
+            name="name"
+            required
+            placeholder="Push B"
+            className="mt-1 sm:max-w-xs"
           />
-        ))}
-        <Button
-          type="button"
-          variant="outline"
-          className="w-full"
-          onClick={() =>
-            setDraftExercises((current) => [...current, makeDraft()])
-          }
-        >
-          <Plus /> Add exercise
-        </Button>
+        </label>
+        <ScheduleControls name="scheduledAt" value={defaultDate(date)} />
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold">
+            Exercises ({draftExercises.length})
+          </h3>
+          {draftExercises.map((draft, index) => (
+            <DemoExerciseDraft
+              key={draft.key}
+              expanded={expanded === draft.key}
+              onToggle={() =>
+                setExpanded(expanded === draft.key ? null : draft.key)
+              }
+              onMove={move}
+              last={index === draftExercises.length - 1}
+              onDuplicate={() => {
+                const copy = { ...draft, key: crypto.randomUUID() };
+                setDraftExercises((current) => [
+                  ...current.slice(0, index + 1),
+                  copy,
+                  ...current.slice(index + 1),
+                ]);
+                setExpanded(copy.key);
+              }}
+              recentIds={recentIds}
+              onSelect={(id) =>
+                setRecentIds((current) =>
+                  [id, ...current.filter((item) => item !== id)].slice(0, 5),
+                )
+              }
+              draft={draft}
+              index={index}
+              exercises={exercises}
+              canRemove={true}
+              update={(update) => updateDraft(draft.key, update)}
+              remove={() =>
+                setDraftExercises((current) =>
+                  current.filter((item) => item.key !== draft.key),
+                )
+              }
+              createExercise={onCreateExercise}
+            />
+          ))}
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={() => {
+              const draft = makeDraft();
+              setDraftExercises((current) => [...current, draft]);
+              setExpanded(draft.key);
+            }}
+          >
+            <Plus /> Add exercise
+          </Button>
+        </div>
       </div>
-      <Button className="w-full">Schedule workout</Button>
+      <BuilderFooter onCancel={onCancel}>
+        <Button type="submit">Create workout</Button>
+      </BuilderFooter>
     </form>
   );
 }
 
 function DemoExerciseDraft({
+  expanded,
+  onToggle,
+  onMove,
+  last,
+  onDuplicate,
+  recentIds,
+  onSelect,
   draft,
   index,
   exercises,
@@ -435,6 +530,13 @@ function DemoExerciseDraft({
   remove,
   createExercise,
 }: {
+  expanded: boolean;
+  onToggle: () => void;
+  onMove: (from: number, to: number) => void;
+  last: boolean;
+  onDuplicate: () => void;
+  recentIds: string[];
+  onSelect: (id: string) => void;
   draft: DemoExerciseDraftState;
   index: number;
   exercises: { id: string; name: string }[];
@@ -443,144 +545,212 @@ function DemoExerciseDraft({
   remove: () => void;
   createExercise: (name: string) => { id: string; name: string };
 }) {
+  const input = useRef<HTMLInputElement>(null);
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
   const normalizedSearch = draft.search.trim().toLowerCase();
-  const matches = exercises.filter((exercise) =>
-    exercise.name.toLowerCase().includes(normalizedSearch),
-  );
+  const matches = normalizedSearch
+    ? rankExercises(exercises, draft.search)
+    : [
+        ...recentIds
+          .map((id) => exercises.find((exercise) => exercise.id === id))
+          .filter((exercise): exercise is { id: string; name: string } =>
+            Boolean(exercise),
+          ),
+        ...exercises
+          .filter((exercise) => !recentIds.includes(exercise.id))
+          .sort((a, b) => a.name.localeCompare(b.name)),
+      ].slice(0, 20);
   const hasExactMatch = exercises.some(
-    (exercise) => exercise.name.trim().toLowerCase() === normalizedSearch,
+    (exercise) => exercise.name.toLowerCase() === normalizedSearch,
   );
+  const select = (exercise: { id: string; name: string }) => {
+    update({ exerciseId: exercise.id, search: exercise.name });
+    onSelect(exercise.id);
+    setOpen(false);
+  };
+  useEffect(() => {
+    if (expanded) requestAnimationFrame(() => input.current?.focus());
+  }, [expanded]);
   return (
-    <fieldset className="space-y-3 rounded-lg border p-3">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-medium">Exercise {index + 1}</span>
-        <Button
+    <fieldset
+      data-sort-group="demo-exercises"
+      data-sort-index={index}
+      className="rounded-xl border"
+    >
+      <div className="flex items-center gap-1 p-2">
+        <SortHandle
+          index={index}
+          group="demo-exercises"
+          onMove={onMove}
+          label={`exercise ${index + 1}`}
+        />
+        <button
           type="button"
-          size="icon"
-          variant="ghost"
-          aria-label={`Remove exercise ${index + 1}`}
-          disabled={!canRemove}
-          onClick={remove}
+          onClick={onToggle}
+          aria-expanded={expanded}
+          aria-controls={`demo-body-${draft.key}`}
+          className="min-w-0 flex-1 py-2 text-left"
         >
-          <Trash2 />
-        </Button>
+          <span className="block truncate text-sm font-semibold">
+            {index + 1}.{" "}
+            {exercises.find((exercise) => exercise.id === draft.exerciseId)
+              ?.name ?? "Choose an exercise"}
+          </span>
+          <span className="text-muted-foreground text-xs">
+            {draft.count} sets · {draft.reps} reps
+          </span>
+        </button>
+        <ChevronDown className={`size-4 ${expanded ? "rotate-180" : ""}`} />
+        <ItemMenu
+          label={`exercise ${index + 1}`}
+          first={index === 0}
+          last={last}
+          canRemove={canRemove}
+          onUp={() => onMove(index, index - 1)}
+          onDown={() => onMove(index, index + 1)}
+          onRemove={remove}
+          onDuplicate={onDuplicate}
+        />
       </div>
-      <Input
-        value={draft.search}
-        onChange={(event) => update({ search: event.target.value })}
-        placeholder="Search exercises"
-        aria-label={`Search exercise ${index + 1}`}
-      />
-      <select
-        aria-label={`Exercise ${index + 1}`}
-        className="h-10 w-full rounded-lg border px-3 text-sm"
-        value={draft.exerciseId}
-        onChange={(event) => update({ exerciseId: event.target.value })}
+      <div
+        hidden={!expanded}
+        id={`demo-body-${draft.key}`}
+        className="space-y-3 border-t p-3"
       >
-        {matches.map((exercise) => (
-          <option key={exercise.id} value={exercise.id}>
-            {exercise.name}
-          </option>
-        ))}
-        {!matches.some((exercise) => exercise.id === draft.exerciseId)
-          ? exercises
-              .filter((exercise) => exercise.id === draft.exerciseId)
-              .map((exercise) => (
-                <option key={exercise.id} value={exercise.id}>
-                  {exercise.name}
-                </option>
-              ))
-          : null}
-      </select>
-      {normalizedSearch && !hasExactMatch ? (
-        draft.creating ? (
-          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed p-2">
-            <span className="text-sm">
-              Create &quot;{draft.search.trim()}&quot;?
-            </span>
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => {
-                const created = createExercise(draft.search);
-                update({
-                  exerciseId: created.id,
-                  search: created.name,
-                  creating: false,
-                });
-              }}
-            >
-              Create and select
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              onClick={() => update({ creating: false })}
-            >
-              Cancel
-            </Button>
-          </div>
-        ) : (
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={() => update({ creating: true })}
-          >
-            <Plus /> Create &quot;{draft.search.trim()}&quot;
-          </Button>
-        )
-      ) : null}
-      <div>
-        <span className="text-sm font-medium">Quick prescription</span>
-        <div className="mt-2 flex flex-wrap gap-2">
-          {[
-            [2, 8],
-            [3, 8],
-            [3, 10],
-            [4, 8],
-            [4, 10],
-          ].map(([count, reps]) => (
-            <Button
-              key={`${count}-${reps}`}
-              type="button"
-              size="xs"
-              variant={
-                draft.count === count && draft.reps === reps
-                  ? "default"
-                  : "outline"
+        <div
+          className="relative"
+          onBlurCapture={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget))
+              setOpen(false);
+          }}
+        >
+          <Input
+            ref={input}
+            value={draft.search}
+            role="combobox"
+            aria-label={`Search exercise ${index + 1}`}
+            aria-autocomplete="list"
+            aria-expanded={open}
+            aria-controls={open ? `demo-results-${draft.key}` : undefined}
+            aria-activedescendant={
+              open && matches.length
+                ? `demo-result-${draft.key}-${Math.min(active, matches.length - 1)}`
+                : undefined
+            }
+            onFocus={(event) => {
+              setActive(0);
+              setOpen(true);
+              event.target.select();
+            }}
+            onChange={(event) => {
+              update({ search: event.target.value, exerciseId: "" });
+              setActive(0);
+              setOpen(true);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Escape" && open) {
+                setOpen(false);
+                event.stopPropagation();
+              } else if (
+                ["ArrowDown", "ArrowUp"].includes(event.key) &&
+                matches.length
+              ) {
+                event.preventDefault();
+                setOpen(true);
+                setActive(
+                  (current) =>
+                    (current +
+                      (event.key === "ArrowDown" ? 1 : -1) +
+                      matches.length) %
+                    matches.length,
+                );
+              } else if (event.key === "Enter" && open && matches.length) {
+                event.preventDefault();
+                select(matches[active] ?? matches[0]);
               }
-              onClick={() => update({ count: count!, reps: reps! })}
-            >
-              {count}×{reps}
-            </Button>
-          ))}
+            }}
+            placeholder="Search exercises"
+          />
+          {open && (
+            <div className="bg-popover absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border shadow-lg">
+              <div id={`demo-results-${draft.key}`} role="listbox">
+                {matches.map((exercise, matchIndex) => (
+                  <Fragment key={exercise.id}>
+                    {!normalizedSearch &&
+                      (matchIndex === 0 || matchIndex === recentIds.length) && (
+                        <p
+                          role="presentation"
+                          className="text-muted-foreground px-3 py-2 text-xs"
+                        >
+                          {matchIndex === 0 && recentIds.length
+                            ? "Recently selected"
+                            : "Exercise library"}
+                        </p>
+                      )}
+                    <button
+                      id={`demo-result-${draft.key}-${matchIndex}`}
+                      role="option"
+                      tabIndex={-1}
+                      aria-selected={active === matchIndex}
+                      type="button"
+                      onPointerDown={(event) => event.preventDefault()}
+                      onClick={() => select(exercise)}
+                      className={`hover:bg-muted block w-full px-3 py-2 text-left text-sm ${active === matchIndex ? "bg-muted" : ""}`}
+                    >
+                      {exercise.name}
+                    </button>
+                  </Fragment>
+                ))}
+                {!matches.length && (
+                  <p className="text-muted-foreground p-3 text-sm">
+                    No matches found.
+                  </p>
+                )}
+              </div>
+              {normalizedSearch && !hasExactMatch && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start rounded-none border-t"
+                  onPointerDown={(event) => event.preventDefault()}
+                  onClick={() => select(createExercise(draft.search))}
+                >
+                  <Plus /> Create custom exercise
+                </Button>
+              )}
+            </div>
+          )}
         </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <label className="text-sm font-medium">
-          Sets
-          <Input
-            type="number"
-            min={1}
-            max={10}
-            value={draft.count}
-            onChange={(event) => update({ count: Number(event.target.value) })}
-            className="mt-1"
-          />
-        </label>
-        <label className="text-sm font-medium">
-          Reps
-          <Input
-            type="number"
-            min={1}
-            max={100}
-            value={draft.reps}
-            onChange={(event) => update({ reps: Number(event.target.value) })}
-            className="mt-1"
-          />
-        </label>
+
+        <PresetMenu onSelect={(count, reps) => update({ count, reps })} />
+        <div className="grid grid-cols-2 gap-3">
+          <label className="text-sm font-medium">
+            Sets
+            <Input
+              type="number"
+              min={1}
+              max={10}
+              value={draft.count}
+              onChange={(event) =>
+                update({ count: Number(event.target.value) })
+              }
+              className="mt-1"
+            />
+          </label>
+          <label className="text-sm font-medium">
+            Reps
+            <Input
+              type="number"
+              min={1}
+              max={100}
+              value={draft.reps}
+              onChange={(event) => update({ reps: Number(event.target.value) })}
+              className="mt-1"
+            />
+          </label>
+        </div>
       </div>
     </fieldset>
   );
@@ -588,10 +758,12 @@ function DemoExerciseDraft({
 
 function MealForm({
   date,
+  onCancel,
   clientId,
   save,
 }: {
   date?: string;
+  onCancel: () => void;
   clientId: string;
   save: (meal: DemoMeal) => void;
 }) {
@@ -608,35 +780,69 @@ function MealForm({
     });
   }
   return (
-    <form action={submit} className="space-y-3">
-      <Input name="name" placeholder="Meal name" required />
-      <Input
-        name="scheduledAt"
-        type="datetime-local"
-        defaultValue={defaultDate(date)}
-        required
-      />
-      <div className="grid grid-cols-2 gap-2">
-        <Input name="calories" type="number" placeholder="Calories" required />
-        <Input
-          name="protein"
-          type="number"
-          placeholder="Protein (g)"
-          required
-        />
-        <Input name="carbs" type="number" placeholder="Carbs (g)" />
-        <Input name="fat" type="number" placeholder="Fat (g)" />
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        submit(new FormData(event.currentTarget));
+      }}
+      className={builderFormClass}
+    >
+      <div className={builderBodyClass} data-builder-scroll>
+        <h3 className="text-sm font-semibold">Meal information</h3>
+        <label className="block space-y-1.5 text-sm">
+          Meal name
+          <Input
+            name="name"
+            className="sm:max-w-xs"
+            placeholder="Meal name"
+            required
+          />
+        </label>
+        <ScheduleControls name="scheduledAt" value={defaultDate(date)} />
+        <h3 className="text-sm font-semibold">Nutrition targets</h3>
+        <div className="grid grid-cols-2 gap-3">
+          <Input
+            aria-label="Calories"
+            name="calories"
+            type="number"
+            placeholder="Calories"
+            required
+          />
+          <Input
+            aria-label="Protein (g)"
+            name="protein"
+            type="number"
+            placeholder="Protein (g)"
+            required
+          />
+          <Input
+            aria-label="Carbohydrates (g)"
+            name="carbs"
+            type="number"
+            placeholder="Carbs (g)"
+          />
+          <Input
+            aria-label="Fat (g)"
+            name="fat"
+            type="number"
+            placeholder="Fat (g)"
+          />
+        </div>
       </div>
-      <Button className="w-full">Schedule meal</Button>
+      <BuilderFooter onCancel={onCancel}>
+        <Button type="submit">Create meal</Button>
+      </BuilderFooter>
     </form>
   );
 }
 function SupplementForm({
   date,
+  onCancel,
   clientId,
   save,
 }: {
   date?: string;
+  onCancel: () => void;
   clientId: string;
   save: (supplement: DemoSupplement) => void;
 }) {
@@ -650,16 +856,35 @@ function SupplementForm({
     });
   }
   return (
-    <form action={submit} className="space-y-3">
-      <Input name="name" placeholder="Supplement" required />
-      <Input name="dosage" placeholder="Dosage" required />
-      <Input
-        name="scheduledAt"
-        type="datetime-local"
-        defaultValue={defaultDate(date)}
-        required
-      />
-      <Button className="w-full">Add supplement</Button>
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        submit(new FormData(event.currentTarget));
+      }}
+      className={builderFormClass}
+    >
+      <div className={builderBodyClass} data-builder-scroll>
+        <section className="space-y-3">
+          <h3 className="text-sm font-semibold">Supplement information</h3>
+          <label className="block space-y-1.5 text-sm">
+            Supplement name
+            <Input
+              name="name"
+              className="sm:max-w-xs"
+              placeholder="Supplement"
+              required
+            />
+          </label>
+          <label className="block space-y-1.5 text-sm">
+            Assigned dosage
+            <Input name="dosage" placeholder="Dosage" required />
+          </label>
+        </section>
+        <ScheduleControls name="scheduledAt" value={defaultDate(date)} />
+      </div>
+      <BuilderFooter onCancel={onCancel}>
+        <Button type="submit">Create supplement</Button>
+      </BuilderFooter>
     </form>
   );
 }

@@ -19,8 +19,8 @@ describe("workout creation and client home regressions", () => {
     expect(builder).toContain("setCreatorName(search)");
     expect(builder).toContain("selectExercise(result.createdExercise)");
     expect(builder).toContain("rankExercises(exercises, search)");
-    expect(workspace).toContain("h-[min(90vh,900px)]");
-    expect(workspace).toContain("sm:max-w-[1050px]");
+    expect(workspace).toContain("h-[min(90dvh,900px)]");
+    expect(workspace).toContain("sm:max-w-[760px]");
     expect(workspace).toContain("disablePointerDismissal");
     expect(workspace).toContain("Discard this unsaved ${creationKind}?");
     expect(action).toContain("createdExercise: {");
@@ -36,8 +36,8 @@ describe("workout creation and client home regressions", () => {
     expect(workspace).toContain('onClick={() => openCreate("supplement")}');
     expect(workspace).toContain('creationKind === "meal"');
     expect(workspace).toContain('creationKind === "supplement"');
-    expect(workspace).toContain("sm:max-w-[850px]");
-    expect(workspace).toContain("sm:max-w-[560px]");
+    expect(workspace).toContain("sm:max-w-[760px]");
+    expect(workspace).toContain("sm:max-w-[520px]");
     expect(workspace).toContain("onCreated={creationSaved}");
     expect(workspace).toContain("onSuccess={onCreated}");
     expect(workspace).toContain('name="dosageText"');

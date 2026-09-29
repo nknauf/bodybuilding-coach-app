@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Fragment,
   startTransition,
   useActionState,
   useEffect,
@@ -10,7 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
-import { ArrowDown, ArrowUp, Copy, Plus, Search, Trash2 } from "lucide-react";
+import { ChevronDown, Plus, Search } from "lucide-react";
 import type { ActionState } from "@/app/actions/state";
 import { initialActionState } from "@/app/actions/state";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,18 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import {
+  BuilderFooter,
+  ScheduleControls,
+  OptionalDetails,
+  ItemMenu,
+  SortHandle,
+  RepRangeInput,
+  PresetMenu,
+  builderFormClass,
+  builderBodyClass,
+} from "@/components/builder-ui";
+import { duplicateExercise, parseRepRange } from "@/lib/builder-values";
 import { rankExercises } from "@/lib/exercise-search";
 
 type ScheduleAction = (
@@ -70,6 +83,7 @@ export function WorkoutBuilder({
   defaultScheduledAt = "",
   onDirtyChange,
   onCreated,
+  onCancel,
 }: {
   action: ScheduleAction;
   mode?: "create" | "edit";
@@ -79,6 +93,7 @@ export function WorkoutBuilder({
   defaultScheduledAt?: string;
   onDirtyChange?: (dirty: boolean) => void;
   onCreated?: () => void;
+  onCancel?: () => void;
 }) {
   const [state, dispatch, pending] = useActionState(action, initialActionState);
   const [exerciseCatalog, setExerciseCatalog] = useState(exercises);
@@ -87,26 +102,19 @@ export function WorkoutBuilder({
       name: "",
       scheduledAt: defaultScheduledAt,
       notes: "",
-      exercises: [
-        {
-          exerciseId: "",
-          notes: "",
-          sets: Array.from({ length: 3 }, () => ({
-            repsMin: "8",
-            repsMax: "8",
-            weight: "",
-            unit: "LB" as const,
-            effort: "",
-          })),
-        },
-      ],
+      exercises: [],
     },
   });
+  const builderRef = useRef<HTMLFormElement>(null);
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
+  const [recentIds, setRecentIds] = useState<string[]>([]);
+  const [emptyError, setEmptyError] = useState(false);
   const items = useFieldArray({
     control: form.control,
     name: "exercises",
     keyName: "fieldKey",
   });
+  const scheduledAt = useWatch({ control: form.control, name: "scheduledAt" });
   const { isDirty } = form.formState;
   const { reset } = form;
   useEffect(() => {
@@ -117,104 +125,198 @@ export function WorkoutBuilder({
     if (state.ok) onCreated?.();
   }, [state.ok, onCreated]);
 
-  const submit = form.handleSubmit((values) => {
-    const data = new FormData();
-    data.set(
-      "payload",
-      JSON.stringify({
-        ...values,
-        notes: values.notes || undefined,
-        exercises: values.exercises.map((exercise) => ({
-          id: exercise.id,
-          exerciseId: exercise.exerciseId,
-          notes: exercise.notes || undefined,
-          sets: exercise.sets.map((set) => ({
-            id: set.id,
-            targetRepsMin: Number(set.repsMin),
-            targetRepsMax: Number(set.repsMax || set.repsMin),
-            targetWeight: set.weight === "" ? undefined : Number(set.weight),
-            targetWeightUnit: set.weight === "" ? undefined : set.unit,
-            targetEffort: set.effort === "" ? undefined : Number(set.effort),
+  const submit = form.handleSubmit(
+    (values) => {
+      if (!values.exercises.length) {
+        setEmptyError(true);
+        return;
+      }
+      const invalidIndex = values.exercises.findIndex((exercise) =>
+        exercise.sets.some(
+          (set) => !parseRepRange(`${set.repsMin}-${set.repsMax}`),
+        ),
+      );
+      if (invalidIndex >= 0) {
+        setExpandedKey(items.fields[invalidIndex].fieldKey);
+        form.setError(`exercises.${invalidIndex}.sets`, {
+          message: "Enter valid reps for every set (for example, 8–10).",
+        });
+        return;
+      }
+      const data = new FormData();
+      data.set(
+        "payload",
+        JSON.stringify({
+          ...values,
+          notes: values.notes || undefined,
+          exercises: values.exercises.map((exercise) => ({
+            id: exercise.id,
+            exerciseId: exercise.exerciseId,
+            notes: exercise.notes || undefined,
+            sets: exercise.sets.map((set) => ({
+              id: set.id,
+              targetRepsMin: Number(set.repsMin),
+              targetRepsMax: Number(set.repsMax || set.repsMin),
+              targetWeight: set.weight === "" ? undefined : Number(set.weight),
+              targetWeightUnit: set.weight === "" ? undefined : set.unit,
+              targetEffort: set.effort === "" ? undefined : Number(set.effort),
+            })),
           })),
-        })),
-      }),
-    );
-    startTransition(() => dispatch(data));
-  });
+        }),
+      );
+      startTransition(() => dispatch(data));
+    },
+    (errors) => {
+      const index = errors.exercises?.findIndex?.((error) => Boolean(error));
+      if (index !== undefined && index >= 0)
+        setExpandedKey(items.fields[index]?.fieldKey ?? null);
+    },
+  );
 
   return (
-    <form onSubmit={submit} className="space-y-4">
-      {!state.ok && state.message ? (
-        <p className="text-destructive text-sm" role="alert">
-          {state.message}
-        </p>
-      ) : null}
-      <Field label="Workout name">
-        <Input {...form.register("name")} required maxLength={120} />
-      </Field>
-      <div className="grid gap-3">
-        <Field label="Client-local date and time">
-          <Input
-            type="datetime-local"
-            {...form.register("scheduledAt")}
-            required
-          />
-        </Field>
-      </div>
-      <Field label="Workout notes">
-        <Textarea {...form.register("notes")} maxLength={2000} />
-      </Field>
-      <div className="space-y-3">
-        <Label>Exercises and assigned sets</Label>
-        {items.fields.map((item, index) => (
-          <ExerciseEditor
-            key={`${item.fieldKey}-${index}`}
-            index={index}
-            form={form}
-            exercises={exerciseCatalog}
-            createExerciseAction={createExerciseAction}
-            onExerciseCreated={(exercise) =>
-              setExerciseCatalog((current) =>
-                current.some((item) => item.id === exercise.id)
-                  ? current
-                  : [...current, exercise].sort((a, b) =>
-                      a.name.localeCompare(b.name),
-                    ),
-              )
-            }
-            canRemove={items.fields.length > 1}
-            onRemove={() => items.remove(index)}
-            onUp={() => items.swap(index, index - 1)}
-            onDown={() => items.swap(index, index + 1)}
-            first={index === 0}
-            last={index === items.fields.length - 1}
-          />
-        ))}
-        <Button
-          type="button"
-          variant="outline"
-          className="w-full"
-          onClick={() =>
-            items.append({
-              exerciseId: "",
-              notes: "",
-              sets: Array.from({ length: 3 }, () => ({
-                repsMin: "8",
-                repsMax: "8",
-                weight: "",
-                unit: "LB" as const,
-                effort: "",
-              })),
-            })
+    <form ref={builderRef} onSubmit={submit} className={builderFormClass}>
+      <div
+        className={builderBodyClass}
+        data-builder-scroll
+        onInvalidCapture={(event) => {
+          const card = (event.target as HTMLElement).closest<HTMLElement>(
+            "[data-exercise-key]",
+          );
+          if (card) setExpandedKey(card.dataset.exerciseKey ?? null);
+        }}
+      >
+        {!state.ok && state.message ? (
+          <p className="text-destructive text-sm" role="alert">
+            {state.message}
+          </p>
+        ) : null}
+        <section className="space-y-3">
+          <h3 className="text-sm font-semibold">Workout information</h3>
+          <Field label="Workout name">
+            <Input
+              {...form.register("name")}
+              required
+              maxLength={120}
+              className="sm:max-w-xs"
+            />
+          </Field>
+        </section>
+        <ScheduleControls
+          value={scheduledAt}
+          onChange={(value) =>
+            form.setValue("scheduledAt", value, { shouldDirty: true })
           }
-        >
-          <Plus /> Add exercise
-        </Button>
+        />
+        <div className="space-y-3">
+          <h3 className="text-sm font-semibold">
+            Exercises{" "}
+            <span className="text-muted-foreground font-normal">
+              ({items.fields.length})
+            </span>
+          </h3>
+          {emptyError && !items.fields.length && (
+            <p role="alert" className="text-destructive text-sm">
+              Add at least one exercise.
+            </p>
+          )}
+          {items.fields.map((item, index) => (
+            <ExerciseEditor
+              key={item.fieldKey}
+              index={index}
+              itemKey={item.fieldKey}
+              expanded={expandedKey === item.fieldKey}
+              onToggle={() =>
+                setExpandedKey(
+                  expandedKey === item.fieldKey ? null : item.fieldKey,
+                )
+              }
+              recentIds={recentIds}
+              onSelect={(id) =>
+                setRecentIds((current) =>
+                  [id, ...current.filter((item) => item !== id)].slice(0, 5),
+                )
+              }
+              onMove={items.move}
+              onDuplicate={() => {
+                items.insert(
+                  index + 1,
+                  duplicateExercise(form.getValues(`exercises.${index}`)),
+                  { shouldFocus: false },
+                );
+                setExpandedKey(null);
+                requestAnimationFrame(() => {
+                  const cards =
+                    builderRef.current?.querySelectorAll<HTMLElement>(
+                      "[data-exercise-key]",
+                    );
+                  setExpandedKey(
+                    cards?.[index + 1]?.dataset.exerciseKey ?? null,
+                  );
+                });
+              }}
+              form={form}
+              exercises={exerciseCatalog}
+              createExerciseAction={createExerciseAction}
+              onExerciseCreated={(exercise) =>
+                setExerciseCatalog((current) =>
+                  current.some((item) => item.id === exercise.id)
+                    ? current
+                    : [...current, exercise].sort((a, b) =>
+                        a.name.localeCompare(b.name),
+                      ),
+                )
+              }
+              canRemove={true}
+              onRemove={() => items.remove(index)}
+              onUp={() => items.move(index, index - 1)}
+              onDown={() => items.move(index, index + 1)}
+              first={index === 0}
+              last={index === items.fields.length - 1}
+            />
+          ))}
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={() => {
+              items.append(
+                {
+                  exerciseId: "",
+                  notes: "",
+                  sets: Array.from({ length: 3 }, () => ({
+                    repsMin: "8",
+                    repsMax: "8",
+                    weight: "",
+                    unit: "LB" as const,
+                    effort: "",
+                  })),
+                },
+                { shouldFocus: false },
+              );
+              requestAnimationFrame(() => {
+                const cards = builderRef.current?.querySelectorAll<HTMLElement>(
+                  "[data-exercise-key]",
+                );
+                setExpandedKey(
+                  cards?.[cards.length - 1]?.dataset.exerciseKey ?? null,
+                );
+              });
+            }}
+          >
+            <Plus /> Add exercise
+          </Button>
+        </div>
+        <OptionalDetails label="Workout notes (optional)">
+          <Field label="Workout notes">
+            <Textarea {...form.register("notes")} maxLength={2000} />
+          </Field>
+        </OptionalDetails>
       </div>
       <ActionFooter
+        onCancel={onCancel}
         pending={pending}
         state={state}
-        label={mode === "edit" ? "Save workout" : "Schedule workout"}
+        label={mode === "edit" ? "Save workout" : "Create workout"}
       />
     </form>
   );
@@ -222,6 +324,13 @@ export function WorkoutBuilder({
 
 function ExerciseEditor({
   index,
+  itemKey,
+  expanded,
+  onToggle,
+  recentIds,
+  onSelect,
+  onMove,
+  onDuplicate,
   form,
   exercises,
   createExerciseAction,
@@ -234,6 +343,13 @@ function ExerciseEditor({
   last,
 }: {
   index: number;
+  itemKey: string;
+  expanded: boolean;
+  onToggle: () => void;
+  recentIds: string[];
+  onSelect: (id: string) => void;
+  onMove: (from: number, to: number) => void;
+  onDuplicate: () => void;
   form: ReturnType<typeof useForm<WorkoutValues>>;
   exercises: ExerciseOption[];
   createExerciseAction: ScheduleAction;
@@ -274,15 +390,39 @@ function ExerciseEditor({
     control: form.control,
     name: `exercises.${index}.exerciseId`,
   });
-  const matches = rankExercises(exercises, search);
+  const watched = useWatch({
+    control: form.control,
+    name: `exercises.${index}`,
+  });
+  const recent = recentIds
+    .map((id) => exercises.find((exercise) => exercise.id === id))
+    .filter((exercise): exercise is ExerciseOption => Boolean(exercise));
+  const matches = search.trim()
+    ? rankExercises(exercises, search)
+    : [
+        ...recent,
+        ...exercises
+          .filter((exercise) => !recentIds.includes(exercise.id))
+          .sort((a, b) => a.name.localeCompare(b.name)),
+      ].slice(0, 20);
+  useEffect(() => {
+    if (expanded) requestAnimationFrame(() => searchRef.current?.focus());
+  }, [expanded]);
   const selectExercise = (exercise: ExerciseOption) => {
     form.setValue(`exercises.${index}.exerciseId`, exercise.id, {
       shouldDirty: true,
       shouldValidate: true,
     });
+    onSelect(exercise.id);
     setSearch(exercise.name);
     setSuggestionsOpen(false);
     searchRef.current?.focus();
+  };
+  const openCreator = () => {
+    setCreatorName(search);
+    setCreateMessage("");
+    setSuggestionsOpen(false);
+    setCreating(true);
   };
   const createExercise = () => {
     if (!creatorName.trim()) {
@@ -315,416 +455,427 @@ function ExerciseEditor({
       })),
     );
   return (
-    <fieldset className="space-y-3 rounded-xl border p-3">
-      <div className="flex flex-wrap items-start gap-2">
-        <div className="relative min-w-56 flex-1">
-          <label
-            className="mb-1.5 block text-sm font-medium"
-            htmlFor={`exercise-search-${index}`}
-          >
-            Exercise {index + 1}
-          </label>
-          <Search className="text-muted-foreground absolute top-9 left-3 size-4" />
-          <Input
-            ref={searchRef}
-            id={`exercise-search-${index}`}
-            value={search}
-            onFocus={() => setSuggestionsOpen(true)}
-            onBlur={() => setSuggestionsOpen(false)}
-            onChange={(event) => {
-              setSearch(event.target.value);
-              setActiveMatch(0);
-              setSuggestionsOpen(true);
-              if (selectedId)
-                form.setValue(`exercises.${index}.exerciseId`, "", {
-                  shouldDirty: true,
-                });
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Escape" && suggestionsOpen) {
-                setSuggestionsOpen(false);
-                event.stopPropagation();
-              } else if (event.key === "ArrowDown" && matches.length) {
-                event.preventDefault();
-                setSuggestionsOpen(true);
-                setActiveMatch((current) => (current + 1) % matches.length);
-              } else if (event.key === "ArrowUp" && matches.length) {
-                event.preventDefault();
-                setActiveMatch(
-                  (current) => (current - 1 + matches.length) % matches.length,
-                );
-              } else if (
-                event.key === "Enter" &&
-                suggestionsOpen &&
-                matches.length
-              ) {
-                event.preventDefault();
-                selectExercise(matches[activeMatch] ?? matches[0]);
-              }
-            }}
-            placeholder="Type an exercise name"
-            className="pl-9"
-            role="combobox"
-            aria-autocomplete="list"
-            aria-expanded={suggestionsOpen && Boolean(search.trim())}
-            aria-controls={
-              suggestionsOpen && search.trim()
-                ? `exercise-results-${index}`
-                : undefined
-            }
-            aria-activedescendant={
-              suggestionsOpen && matches.length
-                ? `exercise-result-${index}-${activeMatch}`
-                : undefined
-            }
-          />
-          <input
-            type="hidden"
-            {...form.register(`exercises.${index}.exerciseId`, {
-              required: "Select an exercise.",
-            })}
-          />
-          {form.formState.errors.exercises?.[index]?.exerciseId ? (
-            <p className="text-destructive mt-1 text-xs" role="alert">
-              Select an exercise from the results.
-            </p>
-          ) : null}
-          {suggestionsOpen && search.trim() ? (
-            <div
-              id={`exercise-results-${index}`}
-              role="listbox"
-              className="bg-popover absolute z-10 mt-1 w-full overflow-hidden rounded-lg border shadow-lg"
-            >
-              {matches.length ? (
-                matches.map((exercise, matchIndex) => (
-                  <button
-                    key={exercise.id}
-                    id={`exercise-result-${index}-${matchIndex}`}
-                    type="button"
-                    role="option"
-                    aria-selected={matchIndex === activeMatch}
-                    className="hover:bg-muted focus-visible:bg-muted focus-visible:outline-ring block w-full px-3 py-2 text-left focus-visible:outline-2"
-                    onPointerDown={(event) => event.preventDefault()}
-                    onClick={() => selectExercise(exercise)}
-                  >
-                    <span className="block text-sm font-medium">
-                      {exercise.name}
-                    </span>
-                    <span className="text-muted-foreground block text-xs">
-                      {[
-                        exercise.muscleGroup,
-                        exercise.equipment?.replaceAll("_", " "),
-                        exercise.category?.toLowerCase(),
-                      ]
-                        .filter(Boolean)
-                        .join(" · ") ||
-                        (exercise.scope === "COACH"
-                          ? "Custom exercise"
-                          : "Library exercise")}
-                    </span>
-                  </button>
-                ))
-              ) : (
-                <p className="text-muted-foreground px-3 py-2 text-sm">
-                  No matches found.
-                </p>
-              )}
-            </div>
-          ) : null}
-          {selectedId && !suggestionsOpen ? (
-            <p className="text-muted-foreground mt-1 text-xs">
-              Selected exercise
-            </p>
-          ) : null}
-        </div>
-        <Button
+    <fieldset
+      data-exercise-key={itemKey}
+      data-sort-group="exercises"
+      data-sort-index={index}
+      className="rounded-xl border"
+    >
+      <div className="flex items-center gap-1 p-2">
+        <SortHandle
+          index={index}
+          group="exercises"
+          onMove={onMove}
+          label={`exercise ${index + 1}`}
+        />
+        <button
           type="button"
-          size="sm"
-          variant="outline"
-          className="mt-6"
-          onClick={() => {
-            setCreatorName(search);
-            setCreateMessage("");
-            setSuggestionsOpen(false);
-            setCreating(true);
-          }}
+          aria-expanded={expanded}
+          aria-controls={`exercise-body-${itemKey}`}
+          onClick={onToggle}
+          className="min-w-0 flex-1 py-2 text-left"
         >
-          <Plus /> Add exercise
-        </Button>
-        <div className="mt-6 flex gap-1">
-          <Button
-            type="button"
-            size="icon"
-            variant="outline"
-            aria-label="Move exercise up"
-            disabled={first}
-            onClick={onUp}
-          >
-            <ArrowUp />
-          </Button>
-          <Button
-            type="button"
-            size="icon"
-            variant="outline"
-            aria-label="Move exercise down"
-            disabled={last}
-            onClick={onDown}
-          >
-            <ArrowDown />
-          </Button>
-          <Button
-            type="button"
-            size="icon"
-            variant="destructive"
-            aria-label="Remove exercise"
-            disabled={!canRemove}
-            onClick={onRemove}
-          >
-            <Trash2 />
-          </Button>
-        </div>
+          <span className="block truncate text-sm font-semibold">
+            {index + 1}.{" "}
+            {watched?.exerciseId
+              ? (exercises.find(
+                  (exercise) => exercise.id === watched.exerciseId,
+                )?.name ??
+                watched.exerciseName ??
+                "Exercise")
+              : "Choose an exercise"}
+          </span>
+          <span className="text-muted-foreground block text-xs">
+            {watched?.sets?.length ?? 0} sets ·{" "}
+            {watched?.sets?.length &&
+            watched.sets.every(
+              (set) =>
+                set.repsMin === watched.sets[0].repsMin &&
+                set.repsMax === watched.sets[0].repsMax,
+            )
+              ? `${watched.sets[0].repsMin}${watched.sets[0].repsMax !== watched.sets[0].repsMin ? `–${watched.sets[0].repsMax}` : ""} reps`
+              : "Varied sets"}
+          </span>
+        </button>
+        <ChevronDown
+          className={`text-muted-foreground size-4 ${expanded ? "rotate-180" : ""}`}
+        />
+        <ItemMenu
+          label={`exercise ${index + 1}`}
+          onUp={onUp}
+          onDown={onDown}
+          onRemove={onRemove}
+          onDuplicate={onDuplicate}
+          first={first}
+          last={last}
+          canRemove={canRemove}
+        />
       </div>
-      <Sheet
-        open={creating}
-        onOpenChange={(open) => {
-          if (!open && !createPending) closeCreator();
-        }}
-        disablePointerDismissal
+      <div
+        id={`exercise-body-${itemKey}`}
+        hidden={!expanded}
+        className="space-y-3 border-t p-3"
       >
-        <SheetContent
-          className="z-[60] w-full overflow-y-auto sm:max-w-md"
-          showCloseButton={false}
-        >
-          <SheetHeader>
-            <SheetTitle>Create exercise</SheetTitle>
-            <SheetDescription>
-              Add a custom exercise to your catalog and select it for this
-              workout.
-            </SheetDescription>
-          </SheetHeader>
-          <form
-            className="space-y-4 px-4 pb-8"
-            onSubmit={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-              createExercise();
+        <div className="space-y-2">
+          <div
+            className="relative min-w-0 flex-1"
+            onBlurCapture={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget))
+                setSuggestionsOpen(false);
             }}
           >
-            <Field label="Name">
-              <Input
-                autoFocus
-                value={creatorName}
-                onChange={(event) => setCreatorName(event.target.value)}
-                maxLength={120}
-                required
-              />
-            </Field>
-            {createMessage ? (
-              <p className="text-destructive text-sm" role="alert">
-                {createMessage}
+            <label
+              className="mb-1.5 block text-sm font-medium"
+              htmlFor={`exercise-search-${index}`}
+            >
+              Exercise {index + 1}
+            </label>
+            <Search className="text-muted-foreground absolute top-9 left-3 size-4" />
+            <Input
+              ref={searchRef}
+              id={`exercise-search-${index}`}
+              value={search}
+              onFocus={(event) => {
+                setActiveMatch(0);
+                setSuggestionsOpen(true);
+                event.target.select();
+              }}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setActiveMatch(0);
+                setSuggestionsOpen(true);
+                if (selectedId)
+                  form.setValue(`exercises.${index}.exerciseId`, "", {
+                    shouldDirty: true,
+                  });
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Escape" && suggestionsOpen) {
+                  setSuggestionsOpen(false);
+                  event.stopPropagation();
+                } else if (event.key === "ArrowDown" && matches.length) {
+                  event.preventDefault();
+                  setSuggestionsOpen(true);
+                  setActiveMatch((current) => (current + 1) % matches.length);
+                } else if (event.key === "ArrowUp" && matches.length) {
+                  event.preventDefault();
+                  setActiveMatch(
+                    (current) =>
+                      (current - 1 + matches.length) % matches.length,
+                  );
+                } else if (
+                  event.key === "Enter" &&
+                  suggestionsOpen &&
+                  matches.length
+                ) {
+                  event.preventDefault();
+                  selectExercise(matches[activeMatch] ?? matches[0]);
+                }
+              }}
+              placeholder="Type an exercise name"
+              className="pl-9"
+              role="combobox"
+              aria-autocomplete="list"
+              aria-expanded={suggestionsOpen}
+              aria-controls={
+                suggestionsOpen ? `exercise-results-${index}` : undefined
+              }
+              aria-activedescendant={
+                suggestionsOpen && matches.length
+                  ? `exercise-result-${index}-${Math.min(activeMatch, matches.length - 1)}`
+                  : undefined
+              }
+            />
+            <input
+              type="hidden"
+              {...form.register(`exercises.${index}.exerciseId`, {
+                required: "Select an exercise.",
+              })}
+            />
+            {form.formState.errors.exercises?.[index]?.exerciseId ? (
+              <p className="text-destructive mt-1 text-xs" role="alert">
+                Select an exercise from the results.
               </p>
             ) : null}
-            <Field label="Muscle group">
-              <select
-                className="bg-background h-10 w-full rounded-lg border px-3 text-sm"
-                value={muscleGroup}
-                onChange={(event) => setMuscleGroup(event.target.value)}
-              >
-                {["CHEST", "BACK", "SHOULDERS", "LEGS", "ARMS", "CORE"].map(
-                  (value) => (
-                    <option key={value}>{value}</option>
-                  ),
-                )}
-              </select>
-            </Field>
-            <Field label="Equipment">
-              <select
-                className="bg-background h-10 w-full rounded-lg border px-3 text-sm"
-                value={equipment}
-                onChange={(event) => setEquipment(event.target.value)}
-              >
-                {[
-                  "BARBELL",
-                  "DUMBBELL",
-                  "CABLE",
-                  "BODYWEIGHT",
-                  "PIN_LOADED_MACHINE",
-                  "PLATE_LOADED_MACHINE",
-                ].map((value) => (
-                  <option key={value}>{value}</option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Category">
-              <select
-                className="bg-background h-10 w-full rounded-lg border px-3 text-sm"
-                value={category}
-                onChange={(event) => setCategory(event.target.value)}
-              >
-                {["COMPOUND", "ISOLATION", "CARDIO", "MOBILITY"].map(
-                  (value) => (
-                    <option key={value}>{value}</option>
-                  ),
-                )}
-              </select>
-            </Field>
-            <div className="flex gap-2">
-              <Button type="submit" disabled={createPending}>
-                {createPending ? "Creating..." : "Create and select"}
-              </Button>
-              <SheetClose
-                render={
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={createPending}
-                  />
-                }
-              >
-                Cancel
-              </SheetClose>
-            </div>
-          </form>
-        </SheetContent>
-      </Sheet>
-      <Input
-        placeholder="Exercise notes (optional)"
-        aria-label={`Notes for exercise ${index + 1}`}
-        maxLength={1000}
-        {...form.register(`exercises.${index}.notes`)}
-      />
-      <div className="space-y-2">
-        <div className="flex flex-wrap gap-1.5" aria-label="Set presets">
-          {[
-            [2, 8],
-            [3, 8],
-            [3, 10],
-            [4, 8],
-            [4, 10],
-          ].map(([count, reps]) => (
-            <Button
-              key={`${count}-${reps}`}
-              type="button"
-              size="xs"
-              variant="outline"
-              onClick={() => addPreset(count!, reps!)}
-            >
-              {count}×{reps}
-            </Button>
-          ))}
+            {suggestionsOpen ? (
+              <div className="bg-popover absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-lg border shadow-lg">
+                <div id={`exercise-results-${index}`} role="listbox">
+                  {matches.length ? (
+                    matches.map((exercise, matchIndex) => (
+                      <Fragment key={exercise.id}>
+                        {!search.trim() &&
+                          (matchIndex === 0 ||
+                            matchIndex === recent.length) && (
+                            <p
+                              role="presentation"
+                              className="text-muted-foreground px-3 py-2 text-xs"
+                            >
+                              {matchIndex === 0 && recent.length
+                                ? "Recently selected"
+                                : "Exercise library"}
+                            </p>
+                          )}
+                        <button
+                          id={`exercise-result-${index}-${matchIndex}`}
+                          type="button"
+                          role="option"
+                          tabIndex={-1}
+                          aria-selected={matchIndex === activeMatch}
+                          className={`hover:bg-muted focus-visible:bg-muted focus-visible:outline-ring block w-full px-3 py-2 text-left focus-visible:outline-2 ${matchIndex === activeMatch ? "bg-muted" : ""}`}
+                          onPointerDown={(event) => event.preventDefault()}
+                          onClick={() => selectExercise(exercise)}
+                        >
+                          <span className="block text-sm font-medium">
+                            {exercise.name}
+                          </span>
+                          <span className="text-muted-foreground block text-xs">
+                            {[
+                              exercise.muscleGroup,
+                              exercise.equipment?.replaceAll("_", " "),
+                              exercise.category?.toLowerCase(),
+                            ]
+                              .filter(Boolean)
+                              .join(" · ") ||
+                              (exercise.scope === "COACH"
+                                ? "Custom exercise"
+                                : "Library exercise")}
+                          </span>
+                        </button>
+                      </Fragment>
+                    ))
+                  ) : (
+                    <p className="text-muted-foreground px-3 py-2 text-sm">
+                      No matches found.
+                    </p>
+                  )}
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="w-full justify-start rounded-none border-t"
+                  onPointerDown={(event) => event.preventDefault()}
+                  onClick={openCreator}
+                >
+                  <Plus /> Create custom exercise
+                </Button>
+              </div>
+            ) : null}
+          </div>
         </div>
-        <div className="text-muted-foreground hidden grid-cols-[2.5rem_1fr_1fr_1fr_1fr_2rem_2rem_2rem] gap-2 px-1 text-xs sm:grid">
-          <span>Set</span>
-          <span>Weight</span>
-          <span>Min reps</span>
-          <span>Max reps</span>
-          <span>RPE/RIR</span>
-          <span />
-          <span />
-          <span />
-        </div>
-        {sets.fields.map((set, setIndex) => (
-          <div
-            key={set.fieldKey}
-            className="grid grid-cols-[2rem_1fr_1fr] items-center gap-2 sm:grid-cols-[2.5rem_1fr_1fr_1fr_1fr_2rem_2rem_2rem]"
+        <Sheet
+          open={creating}
+          onOpenChange={(open) => {
+            if (!open && !createPending) closeCreator();
+          }}
+          disablePointerDismissal
+        >
+          <SheetContent
+            className="z-[60] w-full overflow-y-auto sm:max-w-md"
+            showCloseButton={false}
           >
-            <Label>{setIndex + 1}</Label>
-            <Input
-              aria-label={`Target weight for set ${setIndex + 1}`}
-              inputMode="decimal"
-              type="number"
-              min={0}
-              step="0.01"
-              placeholder="BW"
-              {...form.register(`exercises.${index}.sets.${setIndex}.weight`)}
-            />
-            <Input
-              aria-label={`Minimum reps for set ${setIndex + 1}`}
-              type="number"
-              min={1}
-              max={1000}
-              required
-              {...form.register(`exercises.${index}.sets.${setIndex}.repsMin`)}
-            />
-            <Input
-              aria-label={`Maximum reps for set ${setIndex + 1}`}
-              type="number"
-              min={1}
-              max={1000}
-              required
-              {...form.register(`exercises.${index}.sets.${setIndex}.repsMax`)}
-            />
-            <Input
-              aria-label={`RPE or RIR for set ${setIndex + 1}`}
-              type="number"
-              min={0}
-              max={10}
-              step="0.5"
-              placeholder="—"
-              {...form.register(`exercises.${index}.sets.${setIndex}.effort`)}
-            />
+            <SheetHeader>
+              <SheetTitle>Create exercise</SheetTitle>
+              <SheetDescription>
+                Add a custom exercise to your catalog and select it for this
+                workout.
+              </SheetDescription>
+            </SheetHeader>
+            <form
+              className="space-y-4 px-4 pb-8"
+              onSubmit={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                createExercise();
+              }}
+            >
+              <Field label="Name">
+                <Input
+                  autoFocus
+                  value={creatorName}
+                  onChange={(event) => setCreatorName(event.target.value)}
+                  maxLength={120}
+                  required
+                />
+              </Field>
+              {createMessage ? (
+                <p className="text-destructive text-sm" role="alert">
+                  {createMessage}
+                </p>
+              ) : null}
+              <Field label="Muscle group">
+                <select
+                  className="bg-background h-10 w-full rounded-lg border px-3 text-sm"
+                  value={muscleGroup}
+                  onChange={(event) => setMuscleGroup(event.target.value)}
+                >
+                  {["CHEST", "BACK", "SHOULDERS", "LEGS", "ARMS", "CORE"].map(
+                    (value) => (
+                      <option key={value}>{value}</option>
+                    ),
+                  )}
+                </select>
+              </Field>
+              <Field label="Equipment">
+                <select
+                  className="bg-background h-10 w-full rounded-lg border px-3 text-sm"
+                  value={equipment}
+                  onChange={(event) => setEquipment(event.target.value)}
+                >
+                  {[
+                    "BARBELL",
+                    "DUMBBELL",
+                    "CABLE",
+                    "BODYWEIGHT",
+                    "PIN_LOADED_MACHINE",
+                    "PLATE_LOADED_MACHINE",
+                  ].map((value) => (
+                    <option key={value}>{value}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Category">
+                <select
+                  className="bg-background h-10 w-full rounded-lg border px-3 text-sm"
+                  value={category}
+                  onChange={(event) => setCategory(event.target.value)}
+                >
+                  {["COMPOUND", "ISOLATION", "CARDIO", "MOBILITY"].map(
+                    (value) => (
+                      <option key={value}>{value}</option>
+                    ),
+                  )}
+                </select>
+              </Field>
+              <div className="flex gap-2">
+                <Button type="submit" disabled={createPending}>
+                  {createPending ? "Creating..." : "Create and select"}
+                </Button>
+                <SheetClose
+                  render={
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={createPending}
+                    />
+                  }
+                >
+                  Cancel
+                </SheetClose>
+              </div>
+            </form>
+          </SheetContent>
+        </Sheet>
+
+        <div className="space-y-2">
+          {form.formState.errors.exercises?.[index]?.sets?.message && (
+            <p role="alert" className="text-destructive text-sm">
+              {form.formState.errors.exercises[index]?.sets?.message}
+            </p>
+          )}
+          <PresetMenu onSelect={addPreset} />
+          <div className="text-muted-foreground grid grid-cols-[2rem_1fr_1fr_1fr_2rem] gap-2 text-xs">
+            <span>Set</span>
+            <span>Weight ({watched?.sets?.[0]?.unit ?? "LB"})</span>
+            <span>Reps</span>
+            <span>RPE/RIR</span>
+            <span />
+          </div>
+          {sets.fields.map((set, setIndex) => (
+            <div
+              key={set.fieldKey}
+              data-sort-group={`sets-${itemKey}`}
+              data-sort-index={setIndex}
+              className="grid grid-cols-[2rem_1fr_1fr_1fr_2rem] items-center gap-2"
+            >
+              <SortHandle
+                index={setIndex}
+                group={`sets-${itemKey}`}
+                onMove={sets.move}
+                label={`set ${setIndex + 1}`}
+                number={setIndex + 1}
+              />
+              <Input
+                aria-label={`Target weight for set ${setIndex + 1}`}
+                aria-description={`Weight in ${watched?.sets?.[setIndex]?.unit ?? "LB"}`}
+                inputMode="decimal"
+                type="number"
+                min={0}
+                step="0.01"
+                placeholder="BW"
+                {...form.register(`exercises.${index}.sets.${setIndex}.weight`)}
+              />
+              <RepRangeInput
+                min={watched?.sets?.[setIndex]?.repsMin ?? ""}
+                max={watched?.sets?.[setIndex]?.repsMax ?? ""}
+                label={`Rep range for set ${setIndex + 1}`}
+                onChange={(min, max) => {
+                  if (min && max) form.clearErrors(`exercises.${index}.sets`);
+                  form.setValue(
+                    `exercises.${index}.sets.${setIndex}.repsMin`,
+                    min,
+                    { shouldDirty: true },
+                  );
+                  form.setValue(
+                    `exercises.${index}.sets.${setIndex}.repsMax`,
+                    max,
+                    { shouldDirty: true },
+                  );
+                }}
+              />
+              <Input
+                aria-label={`RPE or RIR for set ${setIndex + 1}`}
+                type="number"
+                min={0}
+                max={10}
+                step="0.5"
+                placeholder="—"
+                {...form.register(`exercises.${index}.sets.${setIndex}.effort`)}
+              />
+              <ItemMenu
+                label={`set ${setIndex + 1}`}
+                first={setIndex === 0}
+                last={setIndex === sets.fields.length - 1}
+                canRemove={sets.fields.length > 1}
+                onUp={() => sets.move(setIndex, setIndex - 1)}
+                onDown={() => sets.move(setIndex, setIndex + 1)}
+                onRemove={() => sets.remove(setIndex)}
+                onDuplicate={() =>
+                  sets.insert(setIndex + 1, {
+                    ...form.getValues(`exercises.${index}.sets.${setIndex}`),
+                    id: undefined,
+                  })
+                }
+              />
+            </div>
+          ))}
+          <div className="flex flex-wrap gap-2">
             <Button
               type="button"
-              size="icon"
-              variant="ghost"
-              aria-label="Move assigned set up"
-              disabled={setIndex === 0}
-              onClick={() => sets.swap(setIndex, setIndex - 1)}
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                sets.append({
+                  repsMin: "8",
+                  repsMax: "8",
+                  weight: "",
+                  unit: "LB",
+                  effort: "",
+                })
+              }
             >
-              <ArrowUp />
-            </Button>
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              aria-label="Move assigned set down"
-              disabled={setIndex === sets.fields.length - 1}
-              onClick={() => sets.swap(setIndex, setIndex + 1)}
-            >
-              <ArrowDown />
-            </Button>
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              aria-label="Remove assigned set"
-              disabled={sets.fields.length === 1}
-              onClick={() => sets.remove(setIndex)}
-              className="col-start-3 sm:col-auto"
-            >
-              <Trash2 />
+              <Plus /> Add set
             </Button>
           </div>
-        ))}
-        <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() =>
-              sets.append({
-                repsMin: "8",
-                repsMax: "8",
-                weight: "",
-                unit: "LB",
-                effort: "",
-              })
-            }
-          >
-            <Plus /> Add set
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              const previous = form.getValues(`exercises.${index}.sets`).at(-1);
-              if (previous) sets.append({ ...previous, id: undefined });
-            }}
-          >
-            <Copy /> Duplicate previous
-          </Button>
         </div>
+        <OptionalDetails label="Exercise notes (optional)">
+          <Input
+            placeholder="Exercise notes"
+            aria-label={`Notes for exercise ${index + 1}`}
+            maxLength={1000}
+            {...form.register(`exercises.${index}.notes`)}
+          />
+        </OptionalDetails>
       </div>
     </fieldset>
   );
@@ -748,6 +899,7 @@ export function MealBuilder({
   defaultScheduledAt = "",
   onDirtyChange,
   onCreated,
+  onCancel,
 }: {
   action: ScheduleAction;
   mode?: "create" | "edit";
@@ -755,6 +907,7 @@ export function MealBuilder({
   defaultScheduledAt?: string;
   onDirtyChange?: (dirty: boolean) => void;
   onCreated?: () => void;
+  onCancel?: () => void;
 }) {
   const [state, dispatch, pending] = useActionState(action, initialActionState);
   const form = useForm<MealValues>({
@@ -773,6 +926,7 @@ export function MealBuilder({
     control: form.control,
     name: "ingredients",
   });
+  const scheduledAt = useWatch({ control: form.control, name: "scheduledAt" });
   const { isDirty } = form.formState;
   const { reset } = form;
   useEffect(() => {
@@ -804,122 +958,139 @@ export function MealBuilder({
     startTransition(() => dispatch(data));
   });
   return (
-    <form onSubmit={submit} className="space-y-4">
-      {!state.ok && state.message ? (
-        <p className="text-destructive text-sm" role="alert">
-          {state.message}
-        </p>
-      ) : null}
-      <Field label="Meal name">
-        <Input {...form.register("name")} required maxLength={120} />
-      </Field>
-      <Field label="Client-local date and time">
-        <Input
-          type="datetime-local"
-          {...form.register("scheduledAt")}
-          required
-        />
-      </Field>
-      <Field label="Description">
-        <Textarea {...form.register("description")} maxLength={2000} />
-      </Field>
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Manual calories">
-          <Input
-            type="number"
-            min={0}
-            max={20000}
-            {...form.register("expectedCalories")}
-          />
-        </Field>
-        <div className="rounded-lg border p-3 text-sm">
-          <p className="text-muted-foreground">Calculated from macros</p>
-          <p className="font-semibold">
-            {calculated === null ? "Not provided" : `${calculated} kcal`}
-          </p>
-          <p className="text-muted-foreground text-xs">
-            Manual calories take precedence.
-          </p>
-        </div>
-        {[
-          ["expectedProteinGrams", "Protein (g)"],
-          ["expectedCarbGrams", "Carbohydrates (g)"],
-          ["expectedFatGrams", "Fat (g)"],
-        ].map(([name, label]) => (
-          <Field key={name} label={label}>
-            <Input
-              type="number"
-              min={0}
-              {...form.register(name as keyof MealValues)}
-            />
-          </Field>
-        ))}
-      </div>
-      <div className="space-y-2">
-        <div className="flex items-center justify-between">
-          <Label>Ingredients</Label>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => ingredients.append({ name: "", amount: "" })}
-          >
-            <Plus /> Add ingredient
-          </Button>
-        </div>
-        {ingredients.fields.length === 0 ? (
-          <p className="text-muted-foreground text-sm">
-            Ingredients are optional.
+    <form onSubmit={submit} className={builderFormClass}>
+      <div className={builderBodyClass} data-builder-scroll>
+        {!state.ok && state.message ? (
+          <p className="text-destructive text-sm" role="alert">
+            {state.message}
           </p>
         ) : null}
-        {ingredients.fields.map((ingredient, index) => (
-          <div key={ingredient.id} className="flex gap-2">
+        <section className="space-y-3">
+          <h3 className="text-sm font-semibold">Meal information</h3>
+          <Field label="Meal name">
             <Input
-              placeholder="Ingredient"
-              aria-label={`Ingredient ${index + 1}`}
-              {...form.register(`ingredients.${index}.name`)}
+              {...form.register("name")}
+              required
+              maxLength={120}
+              className="sm:max-w-xs"
             />
-            <Input
-              placeholder="Amount"
-              aria-label={`Amount for ingredient ${index + 1}`}
-              {...form.register(`ingredients.${index}.amount`)}
-            />
+          </Field>
+        </section>
+        <ScheduleControls
+          value={scheduledAt}
+          onChange={(value) =>
+            form.setValue("scheduledAt", value, { shouldDirty: true })
+          }
+        />
+        <section className="space-y-3">
+          <h3 className="text-sm font-semibold">Nutrition targets</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Manual calories">
+              <Input
+                type="number"
+                min={0}
+                max={20000}
+                {...form.register("expectedCalories")}
+              />
+            </Field>
+            <div className="rounded-lg border p-3 text-sm">
+              <p className="text-muted-foreground">Calculated from macros</p>
+              <p className="font-semibold">
+                {calculated === null ? "Not provided" : `${calculated} kcal`}
+              </p>
+              <p className="text-muted-foreground text-xs">
+                Manual calories take precedence.
+              </p>
+            </div>
+            {[
+              ["expectedProteinGrams", "Protein (g)"],
+              ["expectedCarbGrams", "Carbohydrates (g)"],
+              ["expectedFatGrams", "Fat (g)"],
+            ].map(([name, label]) => (
+              <Field key={name} label={label}>
+                <Input
+                  type="number"
+                  min={0}
+                  {...form.register(name as keyof MealValues)}
+                />
+              </Field>
+            ))}
+          </div>
+        </section>
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <Label>Ingredients</Label>
             <Button
               type="button"
-              size="icon"
-              variant="ghost"
-              aria-label="Move ingredient up"
-              disabled={index === 0}
-              onClick={() => ingredients.swap(index, index - 1)}
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                ingredients.append(
+                  { name: "", amount: "" },
+                  {
+                    focusName: `ingredients.${ingredients.fields.length}.name`,
+                  },
+                )
+              }
             >
-              <ArrowUp />
-            </Button>
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              aria-label="Move ingredient down"
-              disabled={index === ingredients.fields.length - 1}
-              onClick={() => ingredients.swap(index, index + 1)}
-            >
-              <ArrowDown />
-            </Button>
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              aria-label="Remove ingredient"
-              onClick={() => ingredients.remove(index)}
-            >
-              <Trash2 />
+              <Plus /> Add ingredient
             </Button>
           </div>
-        ))}
+          {ingredients.fields.length === 0 ? (
+            <p className="text-muted-foreground text-sm">
+              Ingredients are optional.
+            </p>
+          ) : null}
+          {ingredients.fields.map((ingredient, index) => (
+            <div
+              key={ingredient.id}
+              data-sort-group="ingredients"
+              data-sort-index={index}
+              className="flex items-center gap-2"
+            >
+              <SortHandle
+                index={index}
+                group="ingredients"
+                onMove={ingredients.move}
+                label={`ingredient ${index + 1}`}
+              />
+              <Input
+                placeholder="Ingredient"
+                aria-label={`Ingredient ${index + 1}`}
+                {...form.register(`ingredients.${index}.name`)}
+              />
+              <Input
+                placeholder="Amount"
+                aria-label={`Amount for ingredient ${index + 1}`}
+                {...form.register(`ingredients.${index}.amount`)}
+              />
+              <ItemMenu
+                label={`ingredient ${index + 1}`}
+                first={index === 0}
+                last={index === ingredients.fields.length - 1}
+                onUp={() => ingredients.move(index, index - 1)}
+                onDown={() => ingredients.move(index, index + 1)}
+                onRemove={() => ingredients.remove(index)}
+                onDuplicate={() =>
+                  ingredients.insert(index + 1, {
+                    ...form.getValues(`ingredients.${index}`),
+                  })
+                }
+              />
+            </div>
+          ))}
+        </div>
+        <OptionalDetails label="Description (optional)">
+          <Field label="Description">
+            <Textarea {...form.register("description")} maxLength={2000} />
+          </Field>
+        </OptionalDetails>
       </div>
       <ActionFooter
+        onCancel={onCancel}
         pending={pending}
         state={state}
-        label={mode === "edit" ? "Save meal" : "Schedule meal"}
+        label={mode === "edit" ? "Save meal" : "Create meal"}
       />
     </form>
   );
@@ -927,7 +1098,7 @@ export function MealBuilder({
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <label className="space-y-1.5">
+    <label className="block space-y-1.5">
       <span className="text-sm font-medium">{label}</span>
       {children}
     </label>
@@ -938,13 +1109,15 @@ function ActionFooter({
   pending,
   state,
   label,
+  onCancel,
 }: {
+  onCancel?: () => void;
   pending: boolean;
   state: ActionState;
   label: string;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-3">
+    <BuilderFooter onCancel={onCancel}>
       <Button type="submit" disabled={pending}>
         {pending ? "Saving..." : label}
       </Button>
@@ -958,6 +1131,6 @@ function ActionFooter({
           {state.message}
         </p>
       ) : null}
-    </div>
+    </BuilderFooter>
   );
 }

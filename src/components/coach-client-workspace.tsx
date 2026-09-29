@@ -9,6 +9,12 @@ import {
   type WorkoutValues,
   type MealValues,
 } from "@/components/coach-schedule-forms";
+import {
+  ScheduleControls,
+  OptionalDetails,
+  builderFormClass,
+  builderBodyClass,
+} from "@/components/builder-ui";
 import { MutationForm } from "@/components/mutation-form";
 import { StatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
@@ -216,7 +222,7 @@ export function CoachClientWorkspace({
         }}
       >
         <DialogContent
-          className={`flex max-h-[90vh] w-[calc(100vw-2rem)] flex-col gap-0 overflow-hidden p-0 ${creationKind === "workout" ? "h-[min(90vh,900px)] max-w-[1050px] sm:max-w-[1050px]" : creationKind === "meal" ? "max-w-[850px] sm:max-w-[850px]" : "max-w-[560px] sm:max-w-[560px]"}`}
+          className={`flex max-h-[90dvh] w-[calc(100vw-2rem)] flex-col gap-0 overflow-hidden p-0 ${creationKind === "workout" ? "h-[min(90dvh,900px)] max-w-[760px] sm:max-w-[760px]" : creationKind === "meal" ? "max-w-[760px] sm:max-w-[760px]" : "max-w-[520px] sm:max-w-[520px]"}`}
           showCloseButton={false}
           overlayClassName="bg-black/40"
         >
@@ -235,9 +241,7 @@ export function CoachClientWorkspace({
               Times use the client&apos;s {timezone} timezone.
             </DialogDescription>
           </DialogHeader>
-          <div
-            className={`min-h-0 overflow-y-auto px-4 py-5 sm:px-6 ${creationKind === "workout" ? "flex-1" : "flex-auto"}`}
-          >
+          <div className="flex min-h-0 flex-1 flex-col">
             {creationKind === "workout" ? (
               <WorkoutBuilder
                 action={actions.workout}
@@ -246,6 +250,7 @@ export function CoachClientWorkspace({
                 defaultScheduledAt={defaultAt}
                 onDirtyChange={setCreationDirty}
                 onCreated={creationSaved}
+                onCancel={closeCreation}
               />
             ) : creationKind === "meal" ? (
               <MealBuilder
@@ -253,6 +258,7 @@ export function CoachClientWorkspace({
                 defaultScheduledAt={defaultAt}
                 onDirtyChange={setCreationDirty}
                 onCreated={creationSaved}
+                onCancel={closeCreation}
               />
             ) : creationKind === "supplement" ? (
               <SupplementForm
@@ -260,6 +266,7 @@ export function CoachClientWorkspace({
                 defaultScheduledAt={defaultAt}
                 onDirtyChange={setCreationDirty}
                 onCreated={creationSaved}
+                onCancel={closeCreation}
               />
             ) : null}
           </div>
@@ -273,7 +280,7 @@ export function CoachClientWorkspace({
           }
         }}
       >
-        <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
+        <SheetContent className="flex w-full flex-col overflow-hidden sm:max-w-2xl">
           <SheetHeader>
             <SheetTitle>
               {drawer?.event && !editing
@@ -286,9 +293,9 @@ export function CoachClientWorkspace({
                 : `Times use the client's ${timezone} timezone.`}
             </SheetDescription>
           </SheetHeader>
-          <div className="px-4 pb-8">
+          <div className="flex min-h-0 flex-1 flex-col">
             {drawer?.event && !editing ? (
-              <div className="space-y-5">
+              <div className="space-y-5 overflow-y-auto px-4 pb-8">
                 <div className="rounded-lg border p-4">
                   <p className="text-muted-foreground text-xs uppercase">
                     {drawer.event.kind}
@@ -327,6 +334,7 @@ export function CoachClientWorkspace({
                 initialValues={drawer.event.workout}
                 onDirtyChange={setCreationDirty}
                 onCreated={creationSaved}
+                onCancel={closeEdit}
               />
             ) : drawer?.kind === "meal" && drawer.event?.meal ? (
               <MealBuilder
@@ -336,6 +344,7 @@ export function CoachClientWorkspace({
                 initialValues={drawer.event.meal}
                 onDirtyChange={setCreationDirty}
                 onCreated={creationSaved}
+                onCancel={closeEdit}
               />
             ) : drawer?.kind === "supplement" && drawer.event?.supplement ? (
               <SupplementForm
@@ -346,17 +355,8 @@ export function CoachClientWorkspace({
                 initialValues={drawer.event.supplement}
                 onDirtyChange={setCreationDirty}
                 onCreated={creationSaved}
+                onCancel={closeEdit}
               />
-            ) : null}
-            {drawer?.event && editing ? (
-              <Button
-                type="button"
-                variant="outline"
-                className="mt-4"
-                onClick={closeEdit}
-              >
-                Cancel
-              </Button>
             ) : null}
           </div>
         </SheetContent>
@@ -372,6 +372,7 @@ function SupplementForm({
   defaultScheduledAt,
   onDirtyChange,
   onCreated,
+  onCancel,
 }: {
   action: Action;
   mode?: "create" | "edit";
@@ -384,55 +385,58 @@ function SupplementForm({
   defaultScheduledAt: string;
   onDirtyChange?: (dirty: boolean) => void;
   onCreated?: () => void;
+  onCancel?: () => void;
 }) {
   return (
     <MutationForm
       action={action}
-      submitLabel={mode === "edit" ? "Save supplement" : "Schedule supplement"}
-      className="space-y-4"
+      submitLabel={mode === "edit" ? "Save supplement" : "Create supplement"}
+      className={builderFormClass}
+      builderLayout
+      onCancel={onCancel}
       onDirtyChange={onDirtyChange}
       onSuccess={onCreated}
     >
-      <div className="space-y-1.5">
-        <Label htmlFor="supplement-name">Supplement name</Label>
-        <Input
-          id="supplement-name"
-          name="name"
-          defaultValue={initialValues?.name}
-          maxLength={120}
-          required
-        />
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="supplement-dosage">Assigned dosage</Label>
-        <Input
-          id="supplement-dosage"
-          name="dosageText"
-          defaultValue={initialValues?.dosageText}
-          maxLength={200}
-          required
-        />
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="supplement-scheduled-at">
-          Client-local date and time
-        </Label>
-        <Input
-          id="supplement-scheduled-at"
+      <div className={builderBodyClass} data-builder-scroll>
+        <section className="space-y-3">
+          <h3 className="text-sm font-semibold">Supplement information</h3>
+          <div className="space-y-1.5">
+            <Label htmlFor="supplement-name">Supplement name</Label>
+            <Input
+              id="supplement-name"
+              className="sm:max-w-xs"
+              name="name"
+              defaultValue={initialValues?.name}
+              maxLength={120}
+              required
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="supplement-dosage">Assigned dosage</Label>
+            <Input
+              id="supplement-dosage"
+              name="dosageText"
+              defaultValue={initialValues?.dosageText}
+              maxLength={200}
+              required
+            />
+          </div>
+        </section>
+        <ScheduleControls
           name="scheduledAt"
-          type="datetime-local"
-          defaultValue={initialValues?.scheduledAt ?? defaultScheduledAt}
-          required
+          value={initialValues?.scheduledAt ?? defaultScheduledAt}
         />
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="supplement-notes">Coach notes</Label>
-        <Textarea
-          id="supplement-notes"
-          name="coachNotes"
-          defaultValue={initialValues?.coachNotes}
-          maxLength={1000}
-        />
+        <OptionalDetails label="Coach notes (optional)">
+          <div className="space-y-1.5">
+            <Label htmlFor="supplement-notes">Coach notes</Label>
+            <Textarea
+              id="supplement-notes"
+              name="coachNotes"
+              defaultValue={initialValues?.coachNotes}
+              maxLength={1000}
+            />
+          </div>
+        </OptionalDetails>
       </div>
     </MutationForm>
   );
