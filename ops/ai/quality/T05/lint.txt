@@ -1,0 +1,120 @@
+
+> bodybuilding-coach-app@0.1.0 lint
+> eslint .
+
+
+<repository>/.codex/skills/.system/openai-docs/scripts/resolve-latest-model-info.cjs
+  5:12  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+  6:14  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+
+<repository>/.omx/runtime/codex-home/omx-1791863316999-ks6qro/plugins/cache/openai-curated-remote/sites/1.0.1/scripts/site-workflow.mjs
+  251:7  warning  Expected an assignment or function call and instead saw an expression  @typescript-eslint/no-unused-expressions
+
+<repository>/.omx/runtime/codex-home/omx-1791863316999-ks6qro/plugins/cache/openai-curated-remote/sites/1.0.1/skills/sites/scripts/prepare-site-build.cjs
+  2:12  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+  3:14  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+
+<repository>/.omx/runtime/codex-home/omx-1791863316999-ks6qro/plugins/cache/openai-curated-remote/sites/1.0.1/skills/sites/templates/vinext-starter/build/connector-preview-worker.mjs
+  15:1  warning  Assign object to a variable before exporting as module default  import/no-anonymous-default-export
+
+<repository>/.omx/runtime/codex-home/omx-1791863316999-ks6qro/plugins/cache/openai-curated-remote/sites/1.0.1/skills/sites/templates/vinext-starter/build/sites-worker.ts
+  5:1  warning  Assign object to a variable before exporting as module default  import/no-anonymous-default-export
+
+<repository>/.omx/runtime/codex-home/omx-1791863316999-ks6qro/plugins/cache/openai-curated-remote/sites/1.0.1/skills/sites/templates/vinext-starter/components/ui/carousel.tsx
+  98:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+<repository>/.omx/runtime/codex-home/omx-1791863316999-ks6qro/plugins/cache/openai-curated-remote/sites/1.0.1/skills/sites/templates/vinext-starter/components/ui/carousel.tsx:98:5
+   96 |   React.useEffect(() => {
+   97 |     if (!api) return
+>  98 |     onSelect(api)
+      |     ^^^^^^^^ Avoid calling setState() directly within an effect
+   99 |     api.on("reInit", onSelect)
+  100 |     api.on("select", onSelect)
+  101 |  react-hooks/set-state-in-effect
+
+<repository>/.omx/runtime/codex-home/omx-1791863316999-ks6qro/plugins/cache/openai-curated-remote/sites/1.0.1/skills/sites/templates/vinext-starter/components/ui/combobox.tsx
+  277:3  warning  'children' is defined but never used  @typescript-eslint/no-unused-vars
+
+<repository>/.omx/runtime/codex-home/omx-1791863316999-ks6qro/plugins/cache/openai-curated-remote/sites/1.0.1/skills/sites/templates/vinext-starter/hooks/use-mobile.ts
+  14:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+<repository>/.omx/runtime/codex-home/omx-1791863316999-ks6qro/plugins/cache/openai-curated-remote/sites/1.0.1/skills/sites/templates/vinext-starter/hooks/use-mobile.ts:14:5
+  12 |     }
+  13 |     mql.addEventListener("change", onChange)
+> 14 |     setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
+     |     ^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  15 |     return () => mql.removeEventListener("change", onChange)
+  16 |   }, [])
+  17 |  react-hooks/set-state-in-effect
+
+<repository>/.omx/runtime/codex-home/omx-1791863316999-ks6qro/plugins/cache/openai-curated-remote/sites/1.0.1/skills/sites/templates/worker-esm-starter/worker/index.js
+  32:1  warning  Assign object to a variable before exporting as module default  import/no-anonymous-default-export
+
+<repository>/.omx/runtime/codex-home/omx-1791940698004-zllphf/plugins/cache/openai-curated-remote/sites/1.0.2-remix-b.1/scripts/site-workflow.mjs
+  251:7  warning  Expected an assignment or function call and instead saw an expression  @typescript-eslint/no-unused-expressions
+
+<repository>/.omx/runtime/codex-home/omx-1791940698004-zllphf/plugins/cache/openai-curated-remote/sites/1.0.2-remix-b.1/skills/sites/scripts/prepare-site-build.cjs
+  2:12  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+  3:14  error  A `require()` style import is forbidden  @typescript-eslint/no-require-imports
+
+<repository>/.omx/runtime/codex-home/omx-1791940698004-zllphf/plugins/cache/openai-curated-remote/sites/1.0.2-remix-b.1/skills/sites/templates/vinext-starter/build/connector-preview-worker.mjs
+  15:1  warning  Assign object to a variable before exporting as module default  import/no-anonymous-default-export
+
+<repository>/.omx/runtime/codex-home/omx-1791940698004-zllphf/plugins/cache/openai-curated-remote/sites/1.0.2-remix-b.1/skills/sites/templates/vinext-starter/build/sites-worker.ts
+  5:1  warning  Assign object to a variable before exporting as module default  import/no-anonymous-default-export
+
+<repository>/.omx/runtime/codex-home/omx-1791940698004-zllphf/plugins/cache/openai-curated-remote/sites/1.0.2-remix-b.1/skills/sites/templates/vinext-starter/components/ui/carousel.tsx
+  98:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+<repository>/.omx/runtime/codex-home/omx-1791940698004-zllphf/plugins/cache/openai-curated-remote/sites/1.0.2-remix-b.1/skills/sites/templates/vinext-starter/components/ui/carousel.tsx:98:5
+   96 |   React.useEffect(() => {
+   97 |     if (!api) return
+>  98 |     onSelect(api)
+      |     ^^^^^^^^ Avoid calling setState() directly within an effect
+   99 |     api.on("reInit", onSelect)
+  100 |     api.on("select", onSelect)
+  101 |  react-hooks/set-state-in-effect
+
+<repository>/.omx/runtime/codex-home/omx-1791940698004-zllphf/plugins/cache/openai-curated-remote/sites/1.0.2-remix-b.1/skills/sites/templates/vinext-starter/components/ui/combobox.tsx
+  277:3  warning  'children' is defined but never used  @typescript-eslint/no-unused-vars
+
+<repository>/.omx/runtime/codex-home/omx-1791940698004-zllphf/plugins/cache/openai-curated-remote/sites/1.0.2-remix-b.1/skills/sites/templates/vinext-starter/hooks/use-mobile.ts
+  14:5  error  Error: Calling setState synchronously within an effect can trigger cascading renders
+
+Effects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:
+* Update external systems with the latest state from React.
+* Subscribe for updates from some external system, calling setState in a callback function when external state changes.
+
+Calling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).
+
+<repository>/.omx/runtime/codex-home/omx-1791940698004-zllphf/plugins/cache/openai-curated-remote/sites/1.0.2-remix-b.1/skills/sites/templates/vinext-starter/hooks/use-mobile.ts:14:5
+  12 |     }
+  13 |     mql.addEventListener("change", onChange)
+> 14 |     setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
+     |     ^^^^^^^^^^^ Avoid calling setState() directly within an effect
+  15 |     return () => mql.removeEventListener("change", onChange)
+  16 |   }, [])
+  17 |  react-hooks/set-state-in-effect
+
+<repository>/.omx/runtime/codex-home/omx-1791940698004-zllphf/plugins/cache/openai-curated-remote/sites/1.0.2-remix-b.1/skills/sites/templates/worker-esm-starter/worker/index.js
+  32:1  warning  Assign object to a variable before exporting as module default  import/no-anonymous-default-export
+
+✖ 20 problems (10 errors, 10 warnings)

@@ -1,0 +1,30 @@
+waiting for server to start.... done
+server started
+psql (PostgreSQL) 16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)
+CLIENTDAY POSTGRESQL RUN 1
+
+ RUN  v4.1.10 <repository>
+
+ ✓ tests/integration/client-days-postgres.test.ts (4 tests) 3226ms
+     ✓ backfills all five object kinds and preserves explicit media dates and DST  396ms
+
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+   Start at  14:07:43
+   Duration  3.71s (transform 126ms, setup 0ms, import 167ms, tests 3.23s, environment 0ms)
+
+PASS: no day_test schemas remain; unrelated sentinel unchanged
+CLIENTDAY POSTGRESQL RUN 2
+
+ RUN  v4.1.10 <repository>
+
+ ✓ tests/integration/client-days-postgres.test.ts (4 tests) 2244ms
+
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+   Start at  14:07:47
+   Duration  2.56s (transform 88ms, setup 0ms, import 130ms, tests 2.24s, environment 0ms)
+
+PASS: no day_test schemas remain; unrelated sentinel unchanged
+waiting for server to shut down.... done
+server stopped

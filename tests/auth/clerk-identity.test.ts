@@ -15,11 +15,11 @@ type ExistingUser = {
 };
 
 const invitedAdmin: ExistingUser = {
-  id: "58f28c0d-7124-4765-bdf4-8beeb670ea32",
+  id: "00000000-0000-4000-8000-000000000012",
   clerkUserId: null,
-  email: "noahknauf@icloud.com",
-  firstName: "Noah",
-  lastName: "Knauf",
+  email: "admin@identity.example.test",
+  firstName: "Fixture",
+  lastName: "Admin",
   role: "ADMIN",
   status: "INVITED",
   deletedAt: null,
@@ -27,8 +27,8 @@ const invitedAdmin: ExistingUser = {
 };
 
 const identity = {
-  clerkUserId: "user_3I151qQfx1H6kNt42lUvtLHdUvT",
-  email: "noahknauf@icloud.com",
+  clerkUserId: "user_fixture_new",
+  email: "admin@identity.example.test",
   emailVerified: true,
   firstName: null,
   lastName: null,
@@ -86,8 +86,8 @@ describe("Clerk identity synchronization", () => {
       where: { id: invitedAdmin.id },
       data: expect.objectContaining({
         clerkUserId: identity.clerkUserId,
-        firstName: "Noah",
-        lastName: "Knauf",
+        firstName: "Fixture",
+        lastName: "Admin",
         status: "ACTIVE",
       }),
     });
@@ -112,6 +112,18 @@ describe("Clerk identity synchronization", () => {
       userId: active.id,
       status: "ACTIVE",
     });
+    expect(state.updateUser).toHaveBeenCalledWith({
+      where: { id: active.id },
+      data: {
+        clerkUserId: active.clerkUserId,
+        email: active.email,
+        firstName: active.firstName,
+        lastName: active.lastName,
+        status: "ACTIVE",
+      },
+    });
+    expect(state.updateClient).not.toHaveBeenCalled();
+    expect(state.updateInvites).not.toHaveBeenCalled();
   });
 
   it("never provisions an unknown public signup", async () => {
@@ -135,6 +147,8 @@ describe("Clerk identity synchronization", () => {
       syncClerkIdentity(state.database, { ...identity, ...override }),
     ).resolves.toMatchObject({ outcome: "rejected", reason });
     expect(state.updateUser).not.toHaveBeenCalled();
+    expect(state.updateClient).not.toHaveBeenCalled();
+    expect(state.updateInvites).not.toHaveBeenCalled();
   });
 
   it("rejects an identity collision", async () => {
@@ -152,11 +166,65 @@ describe("Clerk identity synchronization", () => {
       userId: other.id,
     });
     expect(state.updateUser).not.toHaveBeenCalled();
+    expect(state.updateClient).not.toHaveBeenCalled();
+    expect(state.updateInvites).not.toHaveBeenCalled();
+  });
+
+  // T06 evidence only, not an approved replacement policy. T07 must replace
+  // this characterization with the owner's chosen deny/allow invariant.
+  it.each(["webhook", "session_recovery", "operator"] as const)(
+    "characterizes the existing same-email replacement gap via %s",
+    async (source) => {
+      const existing = {
+        ...invitedAdmin,
+        status: "ACTIVE" as const,
+        clerkUserId: "user_fixture_original",
+      };
+      const state = harness({ byEmail: existing });
+      await expect(
+        syncClerkIdentity(state.database, { ...identity, source }),
+      ).resolves.toEqual({
+        outcome: "linked",
+        userId: existing.id,
+        status: "ACTIVE",
+      });
+      expect(state.updateUser).toHaveBeenCalledWith({
+        where: { id: existing.id },
+        data: expect.objectContaining({ clerkUserId: identity.clerkUserId }),
+      });
+      expect(state.updateClient).not.toHaveBeenCalled();
+      expect(state.updateInvites).not.toHaveBeenCalled();
+    },
+  );
+
+  it("characterizes same-ID verified email updates without changing role or ownership", async () => {
+    const existing = {
+      ...invitedAdmin,
+      status: "ACTIVE" as const,
+      clerkUserId: identity.clerkUserId,
+    };
+    const state = harness({ byClerkId: existing, byEmail: null });
+    await expect(
+      syncClerkIdentity(state.database, {
+        ...identity,
+        email: "changed@identity.example.test",
+      }),
+    ).resolves.toMatchObject({
+      outcome: "already_linked",
+      userId: existing.id,
+    });
+    const data = state.updateUser.mock.calls[0][0].data;
+    expect(data.email).toBe("changed@identity.example.test");
+    expect(data).not.toHaveProperty("role");
+    expect(data).not.toHaveProperty("coachProfile");
+    expect(data).not.toHaveProperty("clientProfile");
+    expect(state.updateClient).not.toHaveBeenCalled();
+    expect(state.updateInvites).not.toHaveBeenCalled();
   });
 
   it.each([
     ["archived", { status: "ARCHIVED" as const }],
-    ["deleted", { deletedAt: new Date() }],
+    ["deleted", { deletedAt: new Date("2026-01-01T00:00:00Z") }],
   ])("rejects an %s application account", async (_label, override) => {
     const existing = { ...invitedAdmin, ...override };
     const state = harness({ byEmail: existing });
@@ -165,6 +233,9 @@ describe("Clerk identity synchronization", () => {
       reason: "account_unavailable",
       userId: existing.id,
     });
+    expect(state.updateUser).not.toHaveBeenCalled();
+    expect(state.updateClient).not.toHaveBeenCalled();
+    expect(state.updateInvites).not.toHaveBeenCalled();
   });
 
   it("links but does not activate a disabled account", async () => {

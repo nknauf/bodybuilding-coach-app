@@ -1,0 +1,34 @@
+
+ RUN  v4.1.10 <repository>
+
+ ❯ tests/tooling/eslint-boundaries.test.ts (14 tests | 2 failed) 2136ms
+     × excludes installed agent cache file .codex/skills/.system/example/scripts/tool.cjs 2049ms
+     × excludes installed agent cache file .omx/runtime/example/plugins/cache/example/tool.ts 43ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/tooling/eslint-boundaries.test.ts > root lint boundaries > excludes installed agent cache file .codex/skills/.system/example/scripts/tool.cjs
+ FAIL  tests/tooling/eslint-boundaries.test.ts > root lint boundaries > excludes installed agent cache file .omx/runtime/example/plugins/cache/example/tool.ts
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/tooling/eslint-boundaries.test.ts:12:46
+     10|     ".omx/runtime/example/plugins/cache/example/tool.ts",
+     11|   ])("excludes installed agent cache file %s", async (file) => {
+     12|     expect(await eslint.isPathIgnored(file)).toBe(true);
+       |                                              ^
+     13|   });
+     14|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed | 12 passed (14)
+   Start at  13:35:04
+   Duration  2.80s (transform 43ms, setup 0ms, import 311ms, tests 2.14s, environment 0ms)

@@ -1,0 +1,12 @@
+
+> bodybuilding-coach-app@0.1.0 test
+> vitest run
+
+
+ RUN  v4.1.10 <repository>
+
+
+ Test Files  30 passed | 2 skipped (32)
+      Tests  219 passed | 9 skipped (228)
+   Start at  13:37:04
+   Duration  19.99s (transform 13.36s, setup 0ms, import 81.99s, tests 10.32s, environment 26ms)

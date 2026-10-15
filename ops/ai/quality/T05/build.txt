@@ -1,0 +1,57 @@
+
+> bodybuilding-coach-app@0.1.0 build
+> next build
+
+▲ Next.js 16.3.0 (Turbopack)
+✓ Running next.config.ts took 23ms
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 10.2s
+  Running TypeScript ...
+  Finished TypeScript in 13.1s ...
+  Collecting page data using 7 workers ...
+  Generating static pages using 7 workers (0/22) ...
+  Generating static pages using 7 workers (5/22)
+  Generating static pages using 7 workers (10/22)
+  Generating static pages using 7 workers (16/22)
+✓ Generating static pages using 7 workers (22/22) in 912ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ƒ /admin
+├ ƒ /admin/audit
+├ ƒ /admin/clients
+├ ƒ /api/cron/events
+├ ƒ /api/media
+├ ƒ /api/media/[mediaId]
+├ ƒ /api/media/[mediaId]/view
+├ ƒ /api/media/finalize
+├ ƒ /api/media/init
+├ ƒ /api/webhooks/clerk
+├ ƒ /app
+├ ƒ /client
+├ ƒ /client/days/[date]
+├ ƒ /client/workouts/[workoutId]
+├ ƒ /coach
+├ ƒ /coach/clients/[clientId]
+├ ƒ /coach/clients/[clientId]/days/[date]
+├ ƒ /coach/exercises
+├ ○ /dashboard
+├ ○ /demo
+├ ○ /demo/client
+├ ƒ /demo/client/workouts/[workoutId]
+├ ○ /demo/coach
+├ ƒ /demo/coach/clients/[clientId]
+├ ○ /demo/coach/exercises
+├ ƒ /join/[token]
+├ ○ /onboarding
+├ ƒ /sign-in/[[...sign-in]]
+└ ƒ /sign-up/[[...sign-up]]
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand

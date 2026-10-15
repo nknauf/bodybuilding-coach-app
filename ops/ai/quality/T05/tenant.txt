@@ -1,0 +1,22 @@
+DISPOSABLE LOCAL POSTGRESQL RUN 1
+
+ RUN  v4.1.10 <repository>
+
+
+ Test Files  1 passed (1)
+      Tests  5 passed (5)
+   Start at  00:19:37
+   Duration  1.12s (transform 181ms, setup 76ms, import 61ms, tests 815ms, environment 0ms)
+
+PASS: fixture tables empty; unrelated sentinel unchanged
+DISPOSABLE LOCAL POSTGRESQL RUN 2
+
+ RUN  v4.1.10 <repository>
+
+
+ Test Files  1 passed (1)
+      Tests  5 passed (5)
+   Start at  00:19:38
+   Duration  1.27s (transform 265ms, setup 97ms, import 101ms, tests 893ms, environment 0ms)
+
+PASS: fixture tables empty; unrelated sentinel unchanged
