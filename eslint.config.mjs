@@ -12,6 +12,13 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Preserved nested copy and agent tooling are not the canonical root app.
+    "bodybuilding-coach-app/**",
+    ".codex/**",
+    ".omx/**",
+    ".agents/**",
+    ".claude/**",
+    ".windsurf/**",
   ]),
 ]);
 
