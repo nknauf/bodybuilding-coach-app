@@ -19,7 +19,11 @@
     "db:bootstrap-admin": "tsx prisma/bootstrap-admin.ts",
     "db:link-clerk-user": "tsx prisma/link-clerk-user.ts",
     "db:seed": "prisma db seed",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "security:audit": "node scripts/security-audit.mjs",
+    "verify:github": "node scripts/verify-github.mjs",
+    "test:e2e": "playwright test",
+    "format:check:delivery": "prettier --check .github scripts security playwright.config.ts tests/e2e tests/tooling/install-contract.test.ts tests/tooling/audit-policy.test.ts tests/tooling/github-evidence.test.ts tests/tooling/browser-config.test.ts tests/tooling/workflow-source.test.ts docs/delivery-workflow.md docs/browser-verification.md ops/ai/templates"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1138.0",
@@ -28,15 +32,15 @@
     "@clerk/nextjs": "^7.6.4",
     "@hookform/resolvers": "^5.7.1",
     "@neondatabase/serverless": "^1.1.0",
-    "@prisma/adapter-neon": "^7.9.1",
-    "@prisma/client": "^7.9.1",
+    "@prisma/adapter-neon": "^7.10.1",
+    "@prisma/client": "^7.10.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
     "date-fns-tz": "^3.2.0",
     "dotenv": "^17.4.2",
     "lucide-react": "^1.28.0",
-    "next": "16.3.0",
+    "next": "16.3.8",
     "react": "^19.2.8",
     "react-day-picker": "^10.0.1",
     "react-dom": "^19.2.8",
@@ -48,19 +52,25 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@playwright/test": "1.64.1",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "eslint": "^9",
-    "eslint-config-next": "16.3.0",
+    "eslint-config-next": "16.3.8",
     "prettier": "^3.9.6",
     "prettier-plugin-tailwindcss": "^0.8.1",
-    "prisma": "^7.9.1",
+    "prisma": "^7.10.1",
     "shadcn": "^4.16.1",
     "tailwindcss": "^4",
     "tsx": "^4.23.4",
     "typescript": "^5",
     "vitest": "^4.1.10"
-  }
+  },
+  "engines": {
+    "node": "22.23.3",
+    "npm": "11.21.1"
+  },
+  "packageManager": "npm@11.21.1"
 }

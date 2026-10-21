@@ -48,3 +48,22 @@ next-env.d.ts
 /.claude/
 /.windsurf/
 /skills-lock.json
+.omx-state-locks/
+.omx-state-locks.identity.json
+.codex/*
+!.codex/agents/
+!.codex/agents/**
+!.codex/skills/
+!.codex/skills/**
+.codex/skills/.system/**
+!.codex/prompts/
+!.codex/prompts/**
+.omx/
+
+# Preserved local nested copy; canonical app lives at repository root.
+/bodybuilding-coach-app/
+
+# Browser evidence may contain sensitive session data; never commit it.
+/playwright-report/
+/test-results/
+/blob-report/

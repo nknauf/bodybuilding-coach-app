@@ -1,0 +1,26 @@
+[
+  {
+    "schemaVersion": 1,
+    "advisory": "GHSA-vfj7-8cjw-p6xm",
+    "package": "braces",
+    "severity": "high",
+    "reason": "dev-only braces chain",
+    "approvedBy": "nknauf",
+    "approvedAt": "2026-10-20T02:17:37.000Z",
+    "expiresAt": "2026-11-03T02:17:37.000Z",
+    "paths": [
+      "node_modules/@next/eslint-plugin-next",
+      "node_modules/@shadcn/registry",
+      "node_modules/@ts-morph/common",
+      "node_modules/braces",
+      "node_modules/eslint-config-next",
+      "node_modules/@shadcn/registry/node_modules/fast-glob",
+      "node_modules/@ts-morph/common/node_modules/fast-glob",
+      "node_modules/fast-glob",
+      "node_modules/shadcn/node_modules/fast-glob",
+      "node_modules/micromatch",
+      "node_modules/shadcn",
+      "node_modules/ts-morph"
+    ]
+  }
+]

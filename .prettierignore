@@ -9,3 +9,11 @@ package-lock.json
 AGENTS.md
 CLAUDE.md
 skills-lock.json
+
+# Preserved nested copy and agent tooling (not root application sources)
+/bodybuilding-coach-app/
+/.codex/
+/.omx/
+/playwright-report/
+/test-results/
+/blob-report/
